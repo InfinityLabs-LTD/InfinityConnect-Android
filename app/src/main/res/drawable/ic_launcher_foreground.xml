@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Простой знак «бесконечность» как иконка-заглушка. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#4F8CFF"
+        android:pathData="M40,48 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <path
+        android:fillColor="#4F8CFF"
+        android:pathData="M68,48 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <path
+        android:strokeColor="#4F8CFF"
+        android:strokeWidth="6"
+        android:fillColor="#00000000"
+        android:pathData="M40,48 C40,60 68,60 68,48 C68,36 40,36 40,48 Z" />
+</vector>

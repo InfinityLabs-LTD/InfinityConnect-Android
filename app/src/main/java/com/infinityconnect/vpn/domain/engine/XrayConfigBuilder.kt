@@ -1,0 +1,157 @@
+package com.infinityconnect.vpn.domain.engine
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Строит JSON-конфигурацию Xray-core из [EngineConfig.Vless].
+ *
+ * Схема:
+ *  - inbound "socks" на 127.0.0.1:<socksPort> — точка входа для tun2socks
+ *    (TUN-трафик заворачивается в этот SOCKS-порт на этапе VpnService);
+ *  - outbound "vless" с streamSettings под транспорт (tcp/ws/grpc/xhttp) и
+ *    security (none/tls/reality);
+ *  - outbound "freedom" (direct) и "blackhole" для маршрутизации.
+ *
+ * Возвращает готовую JSON-строку для передачи в libXray.
+ */
+@Singleton
+class XrayConfigBuilder @Inject constructor(
+    private val json: Json,
+) {
+
+    /**
+     * @param config профиль VLESS.
+     * @param socksPort локальный порт SOCKS-inbound (вход для tun2socks).
+     * @param enableLogging уровень лога Xray (warning при true, none иначе).
+     */
+    fun build(
+        config: EngineConfig.Vless,
+        socksPort: Int = DEFAULT_SOCKS_PORT,
+        enableLogging: Boolean = false,
+    ): String {
+        val root = buildJsonObject {
+            putJsonObject("log") {
+                put("loglevel", if (enableLogging) "warning" else "none")
+            }
+            putJsonArray("inbounds") {
+                addJsonObject {
+                    put("tag", "socks-in")
+                    put("port", socksPort)
+                    put("listen", "127.0.0.1")
+                    put("protocol", "socks")
+                    putJsonObject("settings") {
+                        put("udp", true)
+                        put("auth", "noauth")
+                    }
+                    putJsonObject("sniffing") {
+                        put("enabled", true)
+                        putJsonArray("destOverride") {
+                            add("http"); add("tls"); add("quic")
+                        }
+                    }
+                }
+            }
+            putJsonArray("outbounds") {
+                add(buildVlessOutbound(config))
+                addJsonObject {
+                    put("tag", "direct")
+                    put("protocol", "freedom")
+                }
+                addJsonObject {
+                    put("tag", "block")
+                    put("protocol", "blackhole")
+                }
+            }
+        }
+        return json.encodeToString(JsonObject.serializer(), root)
+    }
+
+    private fun buildVlessOutbound(config: EngineConfig.Vless) = buildJsonObject {
+        put("tag", "proxy")
+        put("protocol", "vless")
+        putJsonObject("settings") {
+            putJsonArray("vnext") {
+                addJsonObject {
+                    put("address", config.address)
+                    put("port", config.port)
+                    putJsonArray("users") {
+                        addJsonObject {
+                            put("id", config.uuid)
+                            put("encryption", "none")
+                            config.flow?.let { put("flow", it) }
+                        }
+                    }
+                }
+            }
+        }
+        put("streamSettings", buildStreamSettings(config))
+    }
+
+    private fun buildStreamSettings(config: EngineConfig.Vless) = buildJsonObject {
+        val network = when (config.transport) {
+            is Transport.Tcp -> "tcp"
+            is Transport.Ws -> "ws"
+            is Transport.Grpc -> "grpc"
+            is Transport.Xhttp -> "xhttp"
+        }
+        put("network", network)
+
+        // --- security ---
+        when (val sec = config.security) {
+            is Security.None -> put("security", "none")
+            is Security.Tls -> {
+                put("security", "tls")
+                putJsonObject("tlsSettings") {
+                    sec.sni?.let { put("serverName", it) }
+                    sec.fingerprint?.let { put("fingerprint", it) }
+                    put("allowInsecure", sec.allowInsecure)
+                    sec.alpn?.let { alpn ->
+                        putJsonArray("alpn") { alpn.forEach { add(it) } }
+                    }
+                }
+            }
+            is Security.Reality -> {
+                put("security", "reality")
+                putJsonObject("realitySettings") {
+                    sec.sni?.let { put("serverName", it) }
+                    sec.fingerprint?.let { put("fingerprint", it) }
+                    put("publicKey", sec.publicKey)
+                    sec.shortId?.let { put("shortId", it) }
+                    sec.spiderX?.let { put("spiderX", it) }
+                }
+            }
+        }
+
+        // --- transport-specific settings ---
+        when (val t = config.transport) {
+            is Transport.Tcp -> { /* по умолчанию */ }
+            is Transport.Ws -> putJsonObject("wsSettings") {
+                t.path?.let { put("path", it) }
+                t.host?.let {
+                    putJsonObject("headers") { put("Host", it) }
+                }
+            }
+            is Transport.Grpc -> putJsonObject("grpcSettings") {
+                t.serviceName?.let { put("serviceName", it) }
+            }
+            is Transport.Xhttp -> putJsonObject("xhttpSettings") {
+                t.path?.let { put("path", it) }
+                t.host?.let { put("host", it) }
+                t.mode?.let { put("mode", it) }
+            }
+        }
+    }
+
+    private companion object {
+        const val DEFAULT_SOCKS_PORT = 10808
+    }
+}
