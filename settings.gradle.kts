@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "InfinityConnect"
 include(":app")
+include(":libv2ray-stub")

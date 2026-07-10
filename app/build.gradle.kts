@@ -82,8 +82,13 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
 
-    // Нативные VPN-движки (AAR кладутся вручную в app/libs).
-    // Раскомментировать после добавления файлов — см. README.
-    // implementation(files("libs/libXray.aar"))
+    // Нативный движок Xray (AndroidLibXrayLite / libv2ray), собран gomobile.
+    // Реальный AAR подключён. Стаб (:libv2ray-stub) используется только когда
+    // AAR отсутствует — тогда закомментируйте строку ниже и раскомментируйте
+    // compileOnly(project(":libv2ray-stub")). См. README.
+    implementation(files("libs/libv2ray.aar"))
+    // compileOnly(project(":libv2ray-stub"))
+
+    // Hysteria2 (заглушка-движок; интеграция AAR — см. README).
     // implementation(files("libs/hysteria2.aar"))
 }

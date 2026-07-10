@@ -1,5 +1,6 @@
 package com.infinityconnect.vpn.vpn.hysteria2
 
+import android.net.VpnService
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.vpn.TunnelStats
 import com.infinityconnect.vpn.vpn.VpnEngine
@@ -25,7 +26,7 @@ class Hysteria2Engine @Inject constructor() : VpnEngine {
 
     override fun supports(config: EngineConfig): Boolean = config is EngineConfig.Hysteria2
 
-    override fun start(config: EngineConfig, tunFd: Int, mtu: Int) {
+    override fun start(service: VpnService, config: EngineConfig, tunFd: Int, mtu: Int) {
         throw Hysteria2NotIntegratedException(
             "Движок Hysteria2 ещё не интегрирован. Подключите hysteria2 AAR (см. README).",
         )

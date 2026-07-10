@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+      Боевой трафик — только HTTPS (cleartext запрещён по умолчанию).
+      Исключение: адрес хоста Android-эмулятора (10.0.2.2) для локального
+      тестирования против mock/dev-сервера по HTTP. На проде не влияет.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

@@ -1,82 +1,118 @@
 package com.infinityconnect.vpn.vpn.xray
 
+import android.content.Context
+import android.provider.Settings
+import android.util.Base64
 import android.util.Log
+import go.Seq
+import libv2ray.CoreCallbackHandler
+import libv2ray.CoreController
+import libv2ray.Libv2ray
+import java.io.File
 
 /**
- * Тонкий адаптер к нативной библиотеке Xray (libXray AAR), собранной через
- * gomobile. AAR подключается вручную (см. README) и в этой сборке может
- * отсутствовать — поэтому вызовы идут через рефлексию: проект компилируется
- * без AAR, а при его наличии мост находит и вызывает нужные методы.
+ * Мост к нативному ядру Xray (AndroidLibXrayLite / пакет libv2ray, собран
+ * gomobile). Прямые вызовы Go-обёртки; компиляция — против стаб-модуля
+ * libv2ray-stub, в рантайме работает реальный AAR.
  *
- * ────────────────────────────────────────────────────────────────────────
- * КОНТРАКТ (что должен предоставлять AAR):
- *
- * Разные сборки libXray экспонируют разный API. Ниже — типичный вариант
- * (класс `libXray.LibXray` из github.com/XTLS/libXray). Если у вас другая
- * сборка, скорректируйте имена класса/методов в константах ниже.
- *
- *   - runXray(datDir: String, configJson: String): String  // "" при успехе
- *   - stopXray(): String
- *   - queryStats(...): String   // опционально, зависит от сборки
- *
- * Для tun2socks (заворачивание TUN → локальный SOCKS Xray) обычно используется
- * отдельная библиотека (hev-socks5-tunnel / tun2socks AAR) — см. [Tun2SocksBridge].
- * ────────────────────────────────────────────────────────────────────────
+ * Ключевое отличие актуального API: TUN fd передаётся прямо в ядро через
+ * [CoreController.startLoop] — встроенный tun2socks заворачивает трафик TUN в
+ * аутбаунды ядра, отдельная tun2socks-библиотека НЕ нужна. Обход собственного
+ * трафика ядра мимо TUN (protect) обеспечивается тем, что [Seq.setContext]
+ * получает контекст VpnService.
  */
-object XrayCoreBridge {
+class XrayCoreBridge(
+    private val onCoreShutdown: () -> Unit,
+) {
+    private var controller: CoreController? = null
 
-    private const val TAG = "XrayCoreBridge"
+    @Volatile
+    private var envInitialized = false
 
-    // Имя класса и методов реальной библиотеки. При иной сборке — поменять здесь.
-    private const val LIB_CLASS = "libXray.LibXray"
-    private const val METHOD_RUN = "runXray"
-    private const val METHOD_STOP = "stopXray"
-
-    /** Доступен ли нативный Xray (подключён ли AAR). */
-    val isAvailable: Boolean by lazy {
-        runCatching { Class.forName(LIB_CLASS) }.isSuccess
+    /**
+     * Инициализирует окружение ядра (единожды на процесс): контекст для доступа
+     * к VpnService.protect и путь к geoip/geosite. [serviceContext] должен быть
+     * контекстом самого VpnService.
+     */
+    fun initEnv(serviceContext: Context, assetDir: File) {
+        if (envInitialized) return
+        // Контекст VpnService — через него ядро вызывает protect() для своих
+        // сокетов (иначе исходящий трафик ядра зациклится в TUN).
+        Seq.setContext(serviceContext.applicationContext)
+        Libv2ray.initCoreEnv(assetDir.absolutePath, xudpBaseKey(serviceContext))
+        envInitialized = true
+        Log.i(TAG, "Xray env инициализирован, версия ядра: ${runCatching { Libv2ray.checkVersionX() }.getOrDefault("?")}")
     }
 
     /**
-     * Запускает ядро Xray с данным JSON-конфигом.
-     * @param datDir каталог для geoip/geosite и служебных данных Xray.
-     * @throws XrayUnavailableException если AAR не подключён.
-     * @throws XrayStartException при ошибке запуска ядра.
+     * Запускает ядро с JSON-конфигом и TUN-дескриптором.
+     * @throws Exception при ошибке запуска (перехватывается движком → Error).
      */
-    fun run(datDir: String, configJson: String) {
-        val clazz = loadLibClassOrThrow()
-        val result = runCatching {
-            val method = clazz.getMethod(METHOD_RUN, String::class.java, String::class.java)
-            method.invoke(null, datDir, configJson) as? String
-        }.getOrElse { e ->
-            throw XrayStartException("Не удалось вызвать $METHOD_RUN: ${e.message}", e)
+    fun start(configJson: String, tunFd: Int) {
+        val handler = object : CoreCallbackHandler {
+            override fun startup(): Long = 0
+            override fun shutdown(): Long {
+                // Ядро сообщило о завершении — уведомляем сервис.
+                runCatching { onCoreShutdown() }
+                return 0
+            }
+            override fun onEmitStatus(l: Long, s: String?): Long {
+                if (!s.isNullOrBlank()) Log.d(TAG, "core status[$l]: $s")
+                return 0
+            }
         }
-        // Соглашение libXray: пустая строка — успех, иначе текст ошибки.
-        if (!result.isNullOrEmpty()) {
-            throw XrayStartException("Xray вернул ошибку: $result")
-        }
-        Log.i(TAG, "Xray-ядро запущено")
+        val ctrl = Libv2ray.newCoreController(handler)
+        ctrl.startLoop(configJson, tunFd)
+        controller = ctrl
+        Log.i(TAG, "Xray-ядро запущено (tunFd=$tunFd)")
     }
 
-    /** Останавливает ядро Xray. Ошибки логируются, но не пробрасываются. */
+    /** Останавливает ядро. Идемпотентно. */
     fun stop() {
-        val clazz = runCatching { Class.forName(LIB_CLASS) }.getOrNull() ?: return
-        runCatching {
-            clazz.getMethod(METHOD_STOP).invoke(null)
-        }.onFailure { Log.w(TAG, "Ошибка остановки Xray: ${it.message}") }
+        val ctrl = controller ?: return
+        runCatching { ctrl.stopLoop() }
+            .onFailure { Log.w(TAG, "Ошибка остановки ядра: ${it.message}") }
+        controller = null
+        Log.i(TAG, "Xray-ядро остановлено")
     }
 
-    private fun loadLibClassOrThrow(): Class<*> =
-        runCatching { Class.forName(LIB_CLASS) }.getOrElse {
-            throw XrayUnavailableException(
-                "libXray AAR не подключён. Добавьте libXray.aar в app/libs и " +
-                    "раскомментируйте зависимость в app/build.gradle.kts (см. README).",
-            )
+    /**
+     * Суммарный трафик аутбаунда "proxy" (uplink+downlink) в байтах, либо -1.
+     * Формат queryAllOutboundTrafficStats: "tag,direction,value;...".
+     */
+    fun queryProxyTraffic(): Pair<Long, Long>? {
+        val ctrl = controller ?: return null
+        val raw = runCatching { ctrl.queryAllOutboundTrafficStats() }.getOrNull() ?: return null
+        if (raw.isBlank()) return null
+        var up = 0L
+        var down = 0L
+        for (entry in raw.split(';')) {
+            val parts = entry.split(',')
+            if (parts.size != 3) continue
+            val direction = parts[1]
+            val value = parts[2].toLongOrNull() ?: continue
+            when (direction) {
+                "uplink" -> up += value
+                "downlink" -> down += value
+            }
         }
+        return up to down
+    }
+
+    /**
+     * XUDP base key для ядра: ровно 32 байта в base64 (NO_PADDING|URL_SAFE).
+     * Ядро паникует, если ключ не 32 байта — берём ANDROID_ID, дополняем/
+     * обрезаем до 32 байт (copyOf), кодируем. Алгоритм как в v2rayNG.
+     */
+    private fun xudpBaseKey(context: Context): String {
+        val androidId = runCatching {
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        }.getOrNull().orEmpty().ifBlank { "infinity-connect" }
+        val bytes = androidId.toByteArray(Charsets.UTF_8).copyOf(32) // ровно 32 байта
+        return Base64.encodeToString(bytes, Base64.NO_PADDING or Base64.URL_SAFE or Base64.NO_WRAP)
+    }
+
+    private companion object {
+        const val TAG = "XrayCoreBridge"
+    }
 }
-
-/** AAR Xray не подключён. */
-class XrayUnavailableException(message: String) : Exception(message)
-
-/** Ошибка запуска ядра Xray. */
-class XrayStartException(message: String, cause: Throwable? = null) : Exception(message, cause)

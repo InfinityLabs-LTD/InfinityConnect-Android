@@ -82,17 +82,32 @@ class InfinityVpnService : VpnService() {
                 }
                 tunInterface = tun
 
+                // Если ядро само остановится (разрыв) — отражаем это в UI.
+                if (engine is com.infinityconnect.vpn.vpn.xray.XrayEngine) {
+                    engine.onCoreStopped = {
+                        if (activeEngine != null) stopWithError("Соединение разорвано")
+                    }
+                }
+
                 // Запуск движка (блокирующая инициализация).
-                engine.start(config, tunFd = tun.fd, mtu = MTU)
+                // service = this — ядру нужен VpnService для protect() сокетов.
+                engine.start(this@InfinityVpnService, config, tunFd = tun.fd, mtu = MTU)
                 activeEngine = engine
 
                 sessionStartMs = System.currentTimeMillis()
                 stateHolder.updateState(TunnelState.Connected)
                 updateNotification(config.remark, "Подключено")
                 startStatsLoop(engine)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Throwable, а не Exception: отсутствие нативного AAR даёт
+                // NoClassDefFoundError (Error) — его тоже показываем в UI.
                 Log.e(TAG, "Ошибка запуска туннеля", e)
-                stopWithError(e.message ?: "Ошибка подключения")
+                val msg = when (e) {
+                    is NoClassDefFoundError, is UnsatisfiedLinkError ->
+                        "Нативный движок Xray (libv2ray) не подключён. См. README."
+                    else -> e.message ?: "Ошибка подключения"
+                }
+                stopWithError(msg)
             }
         }
     }

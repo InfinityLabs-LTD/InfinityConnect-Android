@@ -30,27 +30,33 @@ class XrayConfigBuilder @Inject constructor(
 
     /**
      * @param config профиль VLESS.
-     * @param socksPort локальный порт SOCKS-inbound (вход для tun2socks).
+     * @param mtu MTU TUN-интерфейса (должен совпадать с VpnService).
      * @param enableLogging уровень лога Xray (warning при true, none иначе).
+     *
+     * Строит конфиг для TUN-режима AndroidLibXrayLite: inbound типа "tun"
+     * (сам fd передаётся в ядро через startLoop), outbound vless + freedom/block,
+     * DNS и routing (весь трафик в proxy, приватные сети — direct).
      */
     fun build(
         config: EngineConfig.Vless,
-        socksPort: Int = DEFAULT_SOCKS_PORT,
+        mtu: Int = DEFAULT_MTU,
         enableLogging: Boolean = false,
     ): String {
         val root = buildJsonObject {
             putJsonObject("log") {
                 put("loglevel", if (enableLogging) "warning" else "none")
             }
+            putJsonObject("dns") {
+                putJsonArray("servers") {
+                    add("1.1.1.1"); add("8.8.8.8")
+                }
+            }
             putJsonArray("inbounds") {
                 addJsonObject {
-                    put("tag", "socks-in")
-                    put("port", socksPort)
-                    put("listen", "127.0.0.1")
-                    put("protocol", "socks")
+                    put("tag", "tun")
+                    put("protocol", "tun")
                     putJsonObject("settings") {
-                        put("udp", true)
-                        put("auth", "noauth")
+                        put("mtu", mtu)
                     }
                     putJsonObject("sniffing") {
                         put("enabled", true)
@@ -69,6 +75,26 @@ class XrayConfigBuilder @Inject constructor(
                 addJsonObject {
                     put("tag", "block")
                     put("protocol", "blackhole")
+                }
+            }
+            putJsonObject("routing") {
+                put("domainStrategy", "AsIs")
+                putJsonArray("rules") {
+                    // Приватные/локальные сети — напрямую, мимо прокси.
+                    // Явные CIDR (не geoip:private), чтобы не требовать geoip.dat.
+                    addJsonObject {
+                        put("type", "field")
+                        put("outboundTag", "direct")
+                        putJsonArray("ip") {
+                            add("10.0.0.0/8")
+                            add("172.16.0.0/12")
+                            add("192.168.0.0/16")
+                            add("127.0.0.0/8")
+                            add("::1/128")
+                            add("fc00::/7")
+                            add("fe80::/10")
+                        }
+                    }
                 }
             }
         }
@@ -152,6 +178,6 @@ class XrayConfigBuilder @Inject constructor(
     }
 
     private companion object {
-        const val DEFAULT_SOCKS_PORT = 10808
+        const val DEFAULT_MTU = 1500
     }
 }

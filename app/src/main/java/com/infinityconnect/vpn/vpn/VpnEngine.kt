@@ -1,5 +1,6 @@
 package com.infinityconnect.vpn.vpn
 
+import android.net.VpnService
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 
 /**
@@ -7,8 +8,8 @@ import com.infinityconnect.vpn.domain.engine.EngineConfig
  * (VLESS/Reality/XHTTP) и [com.infinityconnect.vpn.vpn.hysteria2.Hysteria2Engine].
  *
  * Движок работает поверх уже установленного TUN-интерфейса: [tunFd] — файловый
- * дескриптор из VpnService.Builder.establish(). Внутри движок разворачивает
- * стек (для Xray — tun2socks → локальный SOCKS Xray).
+ * дескриптор из VpnService.Builder.establish(). Ядро Xray (libv2ray) само
+ * заворачивает трафик TUN в аутбаунды (встроенный tun2socks).
  */
 interface VpnEngine {
 
@@ -19,11 +20,12 @@ interface VpnEngine {
      * Запускает туннель. Блокирующая инициализация; при ошибке бросает
      * исключение (перехватывается сервисом → TunnelState.Error).
      *
+     * @param service сам VpnService — нужен ядру для protect() своих сокетов.
      * @param config профиль сервера.
      * @param tunFd дескриптор TUN-интерфейса.
      * @param mtu MTU туннеля.
      */
-    fun start(config: EngineConfig, tunFd: Int, mtu: Int)
+    fun start(service: VpnService, config: EngineConfig, tunFd: Int, mtu: Int)
 
     /** Останавливает туннель и освобождает ресурсы. Идемпотентно. */
     fun stop()

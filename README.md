@@ -58,45 +58,64 @@ app/src/main/java/com/infinityconnect/vpn/
 корректно сообщают об отсутствии библиотек). Для реального VPN нужны AAR — см.
 ниже.
 
-## Интеграция нативных движков (обязательно для реального туннеля)
+## Интеграция нативного движка Xray (обязательно для реального туннеля)
 
-Нативные библиотеки собираются через **gomobile** (нужен Go-тулчейн) и
-подключаются вручную. Положите `.aar`-файлы в `app/libs/` и раскомментируйте
-зависимости в [app/build.gradle.kts](app/build.gradle.kts):
+Движок VLESS/Reality/XHTTP работает на нативной библиотеке **libv2ray**
+(AndroidLibXrayLite — обёртка Xray-core, та же, что в v2rayNG). AAR собирается
+через gomobile и кладётся в `app/libs/libv2ray.aar`.
+
+Код компилируется и без AAR (против стаб-модуля `:libv2ray-stub`), но реальный
+туннель требует настоящий AAR. Переключение — в
+[app/build.gradle.kts](app/build.gradle.kts):
 
 ```kotlin
-implementation(files("libs/libXray.aar"))
-implementation(files("libs/hysteria2.aar"))
+// С реальным AAR (по умолчанию):
+implementation(files("libs/libv2ray.aar"))
+// Без AAR (только компиляция, туннель не поднимется):
+// compileOnly(project(":libv2ray-stub"))
 ```
 
-### 1. Xray-core (VLESS / Reality / XHTTP) — libXray
+### Сборка libv2ray.aar (проверенная последовательность)
 
-Соберите AAR из [github.com/XTLS/libXray](https://github.com/XTLS/libXray)
-(или совместимой обёртки) через gomobile:
+Требуется: **Go 1.24+**, **Android NDK** (r27b проверен), **JDK 17+**.
 
 ```bash
+# 1. gomobile
 go install golang.org/x/mobile/cmd/gomobile@latest
+
+# 2. исходники (тег актуальной версии)
+git clone --depth 1 --branch v26.7.5 https://github.com/2dust/AndroidLibXrayLite.git
+cd AndroidLibXrayLite
+
+# 3. окружение
+export ANDROID_HOME=$HOME/Android/Sdk
+export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006
+
+# 4. подготовка и сборка
+go mod tidy
 gomobile init
-gomobile bind -target=android -androidapi 26 -o libXray.aar github.com/xtls/libxray
+# ВАЖНО: -ldflags=-checklinkname=0 обходит несовместимость зависимости
+# wlynxg/anet (//go:linkname net.zoneCache) с Go 1.23+.
+gomobile bind -target=android -androidapi 26 -ldflags="-checklinkname=0" -o libv2ray.aar .
+
+# 5. подключение
+cp libv2ray.aar <проект>/app/libs/libv2ray.aar
 ```
 
-Затем сверьте имена класса и методов с
-[XrayCoreBridge.kt](app/src/main/java/com/infinityconnect/vpn/vpn/xray/XrayCoreBridge.kt):
-константы `LIB_CLASS`, `METHOD_RUN`, `METHOD_STOP`. Разные сборки libXray
-экспонируют разный API — при необходимости поправьте константы моста.
+API моста (`libv2ray.CoreController`, `Libv2ray.newCoreController`, `go.Seq`) —
+в [XrayCoreBridge.kt](app/src/main/java/com/infinityconnect/vpn/vpn/xray/XrayCoreBridge.kt);
+сигнатуры-стабы — в модуле `libv2ray-stub`. При смене версии AAR сверьте их
+через `javap -cp classes.jar libv2ray.CoreController`.
 
-Также положите `geoip.dat` / `geosite.dat` в каталог `filesDir/xray` (или
-доработайте `XrayEngine.ensureDatDir()`), если ваша сборка их требует.
+Замечания по конфигу (учтены в [XrayConfigBuilder.kt](app/src/main/java/com/infinityconnect/vpn/domain/engine/XrayConfigBuilder.kt)):
+- inbound типа `tun` (fd передаётся в `startLoop`, встроенный tun2socks —
+  отдельная библиотека не нужна);
+- routing использует явные CIDR приватных сетей вместо `geoip:private`, чтобы
+  не требовать файл `geoip.dat`;
+- XUDP base key (`initCoreEnv`) — ровно 32 байта (иначе ядро паникует),
+  см. `XrayCoreBridge.xudpBaseKey`.
 
-### 2. tun2socks (заворачивание TUN → SOCKS Xray)
-
-Xray работает как локальный SOCKS-прокси; трафик из TUN в него заворачивает
-tun2socks (обычно [hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel)).
-Соберите библиотеку и сверьте контракт с
-[Tun2SocksBridge.kt](app/src/main/java/com/infinityconnect/vpn/vpn/xray/Tun2SocksBridge.kt)
-(`LIB_CLASS`, сигнатуры `startTunnel`/`stopTunnel`).
-
-### 3. Hysteria2 — заглушка
+### Hysteria2 — заглушка
 
 [Hysteria2Engine](app/src/main/java/com/infinityconnect/vpn/vpn/hysteria2/Hysteria2Engine.kt)
 пока не интегрирован. Для полной поддержки:
@@ -116,16 +135,29 @@ tun2socks (обычно [hev-socks5-tunnel](https://github.com/heiher/hev-socks5
 2. **`/v1/config`** — вспомогательный fallback для VLESS-метаданных (raw_uri →
    поля DTO), когда подписка недоступна.
 
+## Статус движка
+
+- [x] **Xray (VLESS/Reality/XHTTP) — работает.** Собран `libv2ray.aar`
+      (gomobile), поднятие туннеля проверено на эмуляторе: ядро стартует,
+      TUN активен, статус «Подключено», статистика и таймер идут, отключение
+      чистое. Реальная статистика трафика берётся из
+      `queryAllOutboundTrafficStats()`.
+- [ ] **Hysteria2** — заглушка `Hysteria2Engine`. Для поддержки: собрать AAR из
+      [github.com/apernet/hysteria](https://github.com/apernet/hysteria),
+      реализовать `start()` (конфиг из `EngineConfig.Hysteria2`, клиент поверх
+      TUN fd — tun2socks не нужен) и `queryStats()`.
+
 ## Что осталось доделать вручную
 
-- [ ] Собрать и подключить `libXray.aar` + tun2socks-библиотеку, сверить мосты.
-- [ ] Собрать и интегрировать `hysteria2.aar` (реализовать `Hysteria2Engine`).
-- [ ] Реальная статистика трафика: пробросить stats из libXray в `queryStats()`
-      (сейчас показывается только время сессии).
+- [ ] Собрать `libv2ray.aar` на машине сборки (см. раздел выше) — бинарник не
+      коммитится в git (96 МБ, в `.gitignore`).
+- [ ] Интегрировать `hysteria2.aar` (реализовать `Hysteria2Engine`).
 - [ ] Уточнить соответствие индекса сервера из `/v1/config/servers` порядку
       профилей в подписке (при расхождении — матчить по `server_address`).
 - [ ] Сгенерировать `gradle-wrapper.jar` и иконки под нужные плотности при
       необходимости (сейчас используется adaptive-иконка).
+- [ ] `network_security_config.xml` разрешает cleartext для `10.0.2.2`/
+      `localhost` (тест против локального сервера) — на релиз можно убрать.
 - [ ] Проверить поведение при отзыве системного разрешения VPN во время сессии.
 
 ## Модель приложения (важно)
