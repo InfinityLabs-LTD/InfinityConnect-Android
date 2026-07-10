@@ -1,1 +1,0 @@
--keep,allowobfuscation,allowshrinking class com.infinityconnect.vpn.ui.auth.AuthViewModel
