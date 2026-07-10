@@ -21,7 +21,7 @@ import retrofit2.http.Query
  *
  * Пути заданы относительными (без ведущего слэша), т.к. базовый URL Retrofit —
  * `.../v1/`. Авторизация подставляется [AuthInterceptor]; обновление токена
- * при 401 — [TokenAuthenticator]. Эндпоинты auth/* от авто-Bearer исключаются
+ * при 401 — [TokenAuthenticator]. Эндпоинты авторизации от авто-Bearer исключаются
  * по логике интерцептора (см. этап network-модуля).
  */
 interface InfinityApi {

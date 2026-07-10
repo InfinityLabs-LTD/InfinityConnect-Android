@@ -1,0 +1,4 @@
+-keep,allowobfuscation,allowshrinking class com.infinityconnect.vpn.ui.auth.AuthViewModel
+-keep,allowobfuscation,allowshrinking class com.infinityconnect.vpn.ui.auth.AuthViewModel
+-keep,allowobfuscation,allowshrinking class com.infinityconnect.vpn.ui.home.HomeViewModel
+-keep,allowobfuscation,allowshrinking class com.infinityconnect.vpn.ui.home.HomeViewModel
