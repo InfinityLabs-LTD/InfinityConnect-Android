@@ -131,12 +131,31 @@ class InfinityVpnService : VpnService() {
     /** Периодически опрашивает статистику движка и обновляет состояние/уведомление. */
     private fun startStatsLoop(engine: VpnEngine) {
         statsJob?.cancel()
+        // Скорость = дельта суммарного трафика между замерами.
+        var prevUp = 0L
+        var prevDown = 0L
+        var prevMs = System.currentTimeMillis()
         statsJob = scope.launch {
             while (isActive) {
-                val elapsed = (System.currentTimeMillis() - sessionStartMs) / 1000
-                val stats = engine.queryStats()?.copy(sessionSeconds = elapsed)
-                    ?: TunnelStats(sessionSeconds = elapsed)
-                stateHolder.updateStats(stats)
+                val now = System.currentTimeMillis()
+                val elapsed = (now - sessionStartMs) / 1000
+                val raw = engine.queryStats()
+                val totalUp = raw?.totalUploadBytes ?: 0
+                val totalDown = raw?.totalDownloadBytes ?: 0
+                val dtSec = ((now - prevMs) / 1000.0).coerceAtLeast(0.001)
+                val upSpeed = ((totalUp - prevUp).coerceAtLeast(0) / dtSec).toLong()
+                val downSpeed = ((totalDown - prevDown).coerceAtLeast(0) / dtSec).toLong()
+                prevUp = totalUp; prevDown = totalDown; prevMs = now
+
+                stateHolder.updateStats(
+                    TunnelStats(
+                        uploadBytesPerSec = upSpeed,
+                        downloadBytesPerSec = downSpeed,
+                        totalUploadBytes = totalUp,
+                        totalDownloadBytes = totalDown,
+                        sessionSeconds = elapsed,
+                    ),
+                )
                 delay(STATS_INTERVAL_MS)
             }
         }

@@ -46,6 +46,14 @@ class XrayConfigBuilder @Inject constructor(
             putJsonObject("log") {
                 put("loglevel", if (enableLogging) "warning" else "none")
             }
+            // Сбор статистики трафика по аутбаундам — иначе queryStats пуст.
+            putJsonObject("stats") {}
+            putJsonObject("policy") {
+                putJsonObject("system") {
+                    put("statsOutboundUplink", true)
+                    put("statsOutboundDownlink", true)
+                }
+            }
             putJsonObject("dns") {
                 putJsonArray("servers") {
                     add("1.1.1.1"); add("8.8.8.8")
@@ -55,8 +63,17 @@ class XrayConfigBuilder @Inject constructor(
                 addJsonObject {
                     put("tag", "tun")
                     put("protocol", "tun")
+                    // Схема TUN-инбаунда форка xray-core (autorepobot): fd берётся
+                    // ядром из env xray.tun.fd (ставит libv2ray.startLoop).
                     putJsonObject("settings") {
+                        put("name", "tun0")
                         put("mtu", mtu)
+                        putJsonArray("gateway") {
+                            add("$TUN_ADDRESS/30")
+                        }
+                        putJsonArray("dns") {
+                            add("1.1.1.1"); add("8.8.8.8")
+                        }
                     }
                     putJsonObject("sniffing") {
                         put("enabled", true)
@@ -179,5 +196,6 @@ class XrayConfigBuilder @Inject constructor(
 
     private companion object {
         const val DEFAULT_MTU = 1500
+        const val TUN_ADDRESS = "10.10.0.2"
     }
 }
