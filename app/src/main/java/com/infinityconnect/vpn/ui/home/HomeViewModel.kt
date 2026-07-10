@@ -3,8 +3,11 @@ package com.infinityconnect.vpn.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinityconnect.vpn.domain.model.AppResult
+import com.infinityconnect.vpn.domain.model.SubscriptionServer
 import com.infinityconnect.vpn.domain.model.VpnKey
+import com.infinityconnect.vpn.domain.usecase.GetSubscriptionServersUseCase
 import com.infinityconnect.vpn.domain.usecase.ObserveKeysUseCase
+import com.infinityconnect.vpn.domain.usecase.PingServerUseCase
 import com.infinityconnect.vpn.domain.usecase.SyncKeysUseCase
 import com.infinityconnect.vpn.ui.util.toMessage
 import com.infinityconnect.vpn.vpn.TunnelState
@@ -12,6 +15,7 @@ import com.infinityconnect.vpn.vpn.TunnelStats
 import com.infinityconnect.vpn.vpn.VpnController
 import com.infinityconnect.vpn.vpn.VpnStateHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +33,9 @@ data class HomeUiState(
     val selectedKeyId: Long? = null,
     val selectedServerIndex: Int = 0,
     val selectedServerName: String? = null,
+    /** Серверы выбранного ключа (стиль Happ) — с метаданными и пингом. */
+    val servers: List<SubscriptionServer> = emptyList(),
+    val serversLoading: Boolean = false,
     val refreshing: Boolean = false,
     val loadingFirstTime: Boolean = true,
     val error: String? = null,
@@ -38,12 +45,16 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     observeKeys: ObserveKeysUseCase,
     private val syncKeys: SyncKeysUseCase,
+    private val getServers: GetSubscriptionServersUseCase,
+    private val pingServer: PingServerUseCase,
     private val vpnController: VpnController,
     stateHolder: VpnStateHolder,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(HomeUiState())
     val ui: StateFlow<HomeUiState> = _ui.asStateFlow()
+
+    private var serversJob: Job? = null
 
     /** Состояние туннеля и статистика — напрямую из holder'а. */
     val tunnelState: StateFlow<TunnelState> = stateHolder.state
@@ -55,16 +66,16 @@ class HomeViewModel @Inject constructor(
         // Подписка на кэш ключей: обновляем список и авто-выбираем ключ.
         observeKeys()
             .onEach { keys ->
-                _ui.update { state ->
-                    val selected = state.selectedKeyId
-                        ?: keys.firstOrNull { it.isActive }?.id
-                        ?: keys.firstOrNull()?.id
-                    state.copy(keys = keys, selectedKeyId = selected)
-                }
+                val prevSelected = _ui.value.selectedKeyId
+                val selected = prevSelected
+                    ?: keys.firstOrNull { it.isActive }?.id
+                    ?: keys.firstOrNull()?.id
+                _ui.update { it.copy(keys = keys, selectedKeyId = selected) }
+                // Загружаем серверы для авто-выбранного ключа.
+                if (prevSelected == null && selected != null) loadServers(selected)
             }
             .launchIn(viewModelScope)
 
-        // Синхронизация при старте.
         refresh(initial = true)
     }
 
@@ -87,12 +98,55 @@ class HomeViewModel @Inject constructor(
     }
 
     fun selectKey(keyId: Long) {
-        _ui.update { it.copy(selectedKeyId = keyId, selectedServerIndex = 0, selectedServerName = null) }
+        if (_ui.value.selectedKeyId == keyId) return
+        _ui.update {
+            it.copy(
+                selectedKeyId = keyId,
+                selectedServerIndex = 0,
+                selectedServerName = null,
+                servers = emptyList(),
+            )
+        }
+        loadServers(keyId)
     }
 
-    /** Обновляет выбранный сервер (вызывается с экрана серверов). */
-    fun selectServer(index: Int, name: String?) {
-        _ui.update { it.copy(selectedServerIndex = index, selectedServerName = name) }
+    /** Загружает серверы подписки ключа и асинхронно пингует каждый. */
+    private fun loadServers(keyId: Long) {
+        serversJob?.cancel()
+        _ui.update { it.copy(serversLoading = true, servers = emptyList()) }
+        serversJob = viewModelScope.launch {
+            when (val result = getServers(keyId)) {
+                is AppResult.Success -> {
+                    _ui.update { it.copy(servers = result.data, serversLoading = false) }
+                    pingAll(keyId, result.data)
+                }
+                is AppResult.Failure ->
+                    _ui.update { it.copy(serversLoading = false) }
+            }
+        }
+    }
+
+    /** Пингует серверы и обновляет их в состоянии по мере готовности. */
+    private fun pingAll(keyId: Long, servers: List<SubscriptionServer>) {
+        servers.forEach { server ->
+            viewModelScope.launch {
+                val ping = pingServer(server.address, server.port)
+                _ui.update { state ->
+                    // Пропускаем, если ключ уже переключён.
+                    if (state.selectedKeyId != keyId) return@update state
+                    state.copy(
+                        servers = state.servers.map {
+                            if (it.index == server.index) it.copy(pingMs = ping) else it
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    /** Выбор сервера из раскрытого списка. */
+    fun selectServer(server: SubscriptionServer) {
+        _ui.update { it.copy(selectedServerIndex = server.index, selectedServerName = server.name) }
     }
 
     /** Активно ли соединение (подключено/подключается). */
@@ -103,15 +157,12 @@ class HomeViewModel @Inject constructor(
 
     fun disconnect() = vpnController.disconnect()
 
-    /** Intent запроса разрешения VPN (или null, если уже выдано). */
     fun vpnPrepareIntent() = vpnController.prepareIntent()
 
-    /** Подключается к выбранному ключу/серверу (после проверки разрешения). */
     fun connect() {
         val keyId = _ui.value.selectedKeyId ?: return
         vpnController.connect(keyId, _ui.value.selectedServerIndex, _ui.value.selectedServerName)
     }
 
-    /** Совместимость с экраном: подключение после выданного разрешения. */
     fun connectAfterPermission() = connect()
 }

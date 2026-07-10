@@ -43,7 +43,6 @@ import com.infinityconnect.vpn.vpn.TunnelState
 @Composable
 fun HomeScreen(
     onOpenProfile: () -> Unit,
-    onOpenServers: (keyId: Long, keyName: String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
@@ -100,7 +99,7 @@ fun HomeScreen(
                 statsText = statsLine(tunnel, stats),
                 onRefresh = { viewModel.refresh() },
                 onSelectKey = viewModel::selectKey,
-                onOpenServers = onOpenServers,
+                onSelectServer = viewModel::selectServer,
                 onToggle = {
                     if (viewModel.isConnectingOrConnected()) {
                         viewModel.disconnect()
@@ -128,7 +127,7 @@ private fun HomeContent(
     statsText: String,
     onRefresh: () -> Unit,
     onSelectKey: (Long) -> Unit,
-    onOpenServers: (Long, String) -> Unit,
+    onSelectServer: (com.infinityconnect.vpn.domain.model.SubscriptionServer) -> Unit,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -155,15 +154,30 @@ private fun HomeContent(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
-            items(ui.keys, key = { it.id }) { key ->
-                KeyCard(
-                    key = key,
-                    selected = key.id == ui.selectedKeyId,
-                    onClick = {
-                        onSelectKey(key.id)
-                        onOpenServers(key.id, key.name)
-                    },
-                )
+            // Под каждым ключом (стиль Happ) раскрываем список его серверов,
+            // если ключ выбран.
+            ui.keys.forEach { key ->
+                item(key = "key-${key.id}") {
+                    KeyCard(
+                        key = key,
+                        selected = key.id == ui.selectedKeyId,
+                        onClick = { onSelectKey(key.id) },
+                    )
+                }
+                if (key.id == ui.selectedKeyId) {
+                    if (ui.serversLoading && ui.servers.isEmpty()) {
+                        item(key = "srv-loading-${key.id}") {
+                            ServersLoadingRow()
+                        }
+                    }
+                    items(ui.servers, key = { "srv-${key.id}-${it.index}" }) { server ->
+                        ServerRow(
+                            server = server,
+                            selected = server.index == ui.selectedServerIndex,
+                            onClick = { onSelectServer(server) },
+                        )
+                    }
+                }
             }
         }
     }

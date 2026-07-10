@@ -70,3 +70,20 @@ data class ServerEntry(
     val flag: String?,
     val serverAddress: String?,
 )
+
+/**
+ * Сервер подписки для отображения в списке (стиль Happ): флаг, имя,
+ * строка метаданных (VLESS | TCP | Reality | JSON) и измеренный пинг.
+ */
+data class SubscriptionServer(
+    val index: Int,
+    val name: String,
+    val flag: String?,
+    val address: String,
+    val port: Int,
+    val protocol: VpnProtocol,
+    /** Строка метаданных вида "VLESS | TCP | Reality | JSON". */
+    val meta: String,
+    /** Пинг в мс; null — ещё не измерен, -1 — недоступен. */
+    val pingMs: Int? = null,
+)

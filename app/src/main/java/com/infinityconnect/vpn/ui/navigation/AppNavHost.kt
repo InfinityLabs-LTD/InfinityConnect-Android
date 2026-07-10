@@ -2,32 +2,24 @@ package com.infinityconnect.vpn.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import com.infinityconnect.vpn.ui.SplashViewModel
 import com.infinityconnect.vpn.ui.StartDestination
 import com.infinityconnect.vpn.ui.auth.AuthScreen
 import com.infinityconnect.vpn.ui.components.FullScreenLoading
 import com.infinityconnect.vpn.ui.home.HomeScreen
-import com.infinityconnect.vpn.ui.home.HomeViewModel
 import com.infinityconnect.vpn.ui.onboarding.OnboardingScreen
 import com.infinityconnect.vpn.ui.profile.ProfileScreen
-import com.infinityconnect.vpn.ui.servers.ServersScreen
 
 /**
  * Корневой навигационный граф. Стартовый экран (splash) определяет, куда вести:
- * онбординг / авторизация / главная. Экраны home и servers объединены во
- * вложенный граф, чтобы делить один [HomeViewModel] (выбор сервера возвращается
- * на главный экран).
+ * онбординг / авторизация / главная. Серверы подписки раскрываются прямо на
+ * главном экране (стиль Happ), отдельного экрана серверов нет.
  */
 @Composable
 fun AppNavHost(navController: NavHostController = rememberNavController()) {
@@ -70,7 +62,11 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             )
         }
 
-        homeGraph(navController)
+        composable(Routes.HOME) {
+            HomeScreen(
+                onOpenProfile = { navController.navigate(Routes.PROFILE) },
+            )
+        }
 
         composable(Routes.PROFILE) {
             ProfileScreen(
@@ -85,40 +81,3 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
     }
 }
 
-/** Вложенный граф home+servers с общим HomeViewModel. */
-private fun NavGraphBuilder.homeGraph(navController: NavHostController) {
-    navigation(startDestination = "home_main", route = Routes.HOME) {
-        composable("home_main") { entry ->
-            val parentEntry = remember(entry) {
-                navController.getBackStackEntry(Routes.HOME)
-            }
-            val homeViewModel: HomeViewModel = hiltViewModel(parentEntry)
-            HomeScreen(
-                onOpenProfile = { navController.navigate(Routes.PROFILE) },
-                onOpenServers = { keyId, keyName ->
-                    navController.navigate(Routes.servers(keyId, keyName))
-                },
-                viewModel = homeViewModel,
-            )
-        }
-
-        composable(
-            route = Routes.SERVERS,
-            arguments = listOf(
-                navArgument("keyId") { type = NavType.StringType },
-                navArgument("keyName") { type = NavType.StringType },
-            ),
-        ) { entry ->
-            val parentEntry = remember(entry) {
-                navController.getBackStackEntry(Routes.HOME)
-            }
-            val homeViewModel: HomeViewModel = hiltViewModel(parentEntry)
-            ServersScreen(
-                onBack = { navController.popBackStack() },
-                onServerSelected = { index, name ->
-                    homeViewModel.selectServer(index, name)
-                },
-            )
-        }
-    }
-}
