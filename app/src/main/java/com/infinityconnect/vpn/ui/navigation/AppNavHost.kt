@@ -12,14 +12,14 @@ import com.infinityconnect.vpn.ui.SplashViewModel
 import com.infinityconnect.vpn.ui.StartDestination
 import com.infinityconnect.vpn.ui.auth.AuthScreen
 import com.infinityconnect.vpn.ui.components.FullScreenLoading
+import com.infinityconnect.vpn.ui.components.FullScreenMessage
 import com.infinityconnect.vpn.ui.home.HomeScreen
-import com.infinityconnect.vpn.ui.onboarding.OnboardingScreen
 import com.infinityconnect.vpn.ui.profile.ProfileScreen
 
 /**
- * Корневой навигационный граф. Стартовый экран (splash) определяет, куда вести:
- * онбординг / авторизация / главная. Серверы подписки раскрываются прямо на
- * главном экране (стиль Happ), отдельного экрана серверов нет.
+ * Корневой навигационный граф. Домен сервера фиксирован, экрана онбординга нет:
+ * splash сам выполняет discovery и ведёт на авторизацию или главную. Серверы
+ * подписки раскрываются на главном экране (стиль Happ).
  */
 @Composable
 fun AppNavHost(navController: NavHostController = rememberNavController()) {
@@ -28,28 +28,28 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         composable(Routes.SPLASH) {
             val viewModel: SplashViewModel = hiltViewModel()
             val destination by viewModel.destination.collectAsStateWithLifecycle()
-            FullScreenLoading()
+
+            when (destination) {
+                StartDestination.ERROR ->
+                    FullScreenMessage(
+                        title = "Нет соединения с сервером",
+                        description = "Проверьте интернет и попробуйте снова.",
+                        actionLabel = "Повторить",
+                        onAction = { viewModel.retry() },
+                    )
+                else -> FullScreenLoading()
+            }
+
             androidx.compose.runtime.LaunchedEffect(destination) {
-                val dest = destination ?: return@LaunchedEffect
-                val route = when (dest) {
-                    StartDestination.ONBOARDING -> Routes.ONBOARDING
+                val route = when (destination) {
                     StartDestination.AUTH -> Routes.AUTH
                     StartDestination.HOME -> Routes.HOME
+                    else -> return@LaunchedEffect // null (загрузка) или ERROR
                 }
                 navController.navigate(route) {
                     popUpTo(Routes.SPLASH) { inclusive = true }
                 }
             }
-        }
-
-        composable(Routes.ONBOARDING) {
-            OnboardingScreen(
-                onDiscovered = {
-                    navController.navigate(Routes.AUTH) {
-                        popUpTo(Routes.ONBOARDING) { inclusive = true }
-                    }
-                },
-            )
         }
 
         composable(Routes.AUTH) {
