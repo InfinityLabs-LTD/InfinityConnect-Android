@@ -52,8 +52,6 @@ private fun EngineConfig.toSubscriptionServer(index: Int): SubscriptionServer {
             }
             is EngineConfig.Hysteria2 -> add("UDP")
         }
-        // Источник — JSON-конфиг подписки (в отличие от VLESS-URI).
-        add("JSON")
     }
     return SubscriptionServer(
         index = index,

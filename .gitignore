@@ -11,3 +11,11 @@ local.properties
 
 # Собранные/скачанные AAR движков — не коммитим бинарники
 /app/libs/*.aar
+
+# Подписной keystore — секрет, не коммитим
+/app/release.keystore
+*.keystore
+*.jks
+
+# Готовые APK — не коммитим (большие бинарники)
+/*.apk

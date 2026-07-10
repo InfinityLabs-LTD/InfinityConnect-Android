@@ -41,8 +41,12 @@ class DeviceIdProvider @Inject constructor(
     val osVersion: String get() = Build.VERSION.RELEASE ?: Build.VERSION.SDK_INT.toString()
     val deviceModel: String get() = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
 
-    /** User-Agent клиента Happ — панель отдаёт по нему JSON-конфиги. */
-    val userAgent: String get() = "Happ/1.9.0"
+    /**
+     * User-Agent клиента: панель Remnawave настроена отдавать реальные конфиги
+     * (VLESS-URI в base64) именно для InfinityVPN. Версия синхронизирована с
+     * versionName приложения.
+     */
+    val userAgent: String get() = "InfinityVPN/1.0.0"
 
     private companion object {
         const val KEY_HWID = "hwid"

@@ -180,11 +180,18 @@ class SubscriptionParser @Inject constructor(
 
     private fun maybeBase64Decode(raw: String): String {
         if (raw.contains("://")) return raw
-        val candidate = raw.replace("\n", "").replace("\r", "")
-        val bytes = runCatching {
-            Base64.decode(candidate, Base64.DEFAULT or Base64.URL_SAFE)
-        }.getOrNull() ?: return raw
-        val text = runCatching { String(bytes, Charsets.UTF_8) }.getOrNull() ?: return raw
-        return if (text.contains("://") || text.trimStart().startsWith("[")) text else raw
+        val candidate = raw.replace("\n", "").replace("\r", "").trim()
+        // Пробуем оба варианта: стандартный base64 (символы +/) и URL-safe (-_).
+        // Комбинировать флаги DEFAULT|URL_SAFE нельзя — они взаимоисключающие.
+        val flags = intArrayOf(Base64.DEFAULT, Base64.URL_SAFE)
+        for (flag in flags) {
+            val text = runCatching {
+                String(Base64.decode(candidate, flag or Base64.NO_WRAP), Charsets.UTF_8)
+            }.getOrNull()
+            if (text != null && (text.contains("://") || text.trimStart().startsWith("["))) {
+                return text
+            }
+        }
+        return raw
     }
 }
