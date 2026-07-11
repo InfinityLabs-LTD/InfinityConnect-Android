@@ -31,11 +31,15 @@ app/src/main/java/com/infinityconnect/vpn/
 ├── vpn/
 │   ├── VpnEngine / EngineSelector / VpnStateHolder / VpnController
 │   ├── InfinityVpnService   # TUN + foreground + выбор движка
-│   ├── xray/         # XrayEngine + мосты к libXray и tun2socks (через рефлексию)
+│   ├── xray/         # XrayEngine + мост к libv2ray (Xray-core)
 │   └── hysteria2/    # Hysteria2Engine (заглушка)
-├── ui/               # Compose: onboarding / auth / home / servers / profile
+├── ui/               # Compose: auth / home (ключи+серверы, стиль Happ) / profile
 └── di/               # Hilt-модули (Network, Repository, Token)
 ```
+
+> Домен сервера фиксирован ([BuildFlags.SERVER_DOMAIN]) — экрана ввода адреса и
+> онбординга нет. При запуске discovery выполняется автоматически, пользователь
+> вводит только логин и пароль.
 
 ## Сборка
 
@@ -166,4 +170,3 @@ API моста (`libv2ray.CoreController`, `Libv2ray.newCoreController`, `go.Seq
 - Ключи загружаются автоматически через `/v1/keys` после логина, при старте и
   pull-to-refresh.
 - Клиент знает только **домен сервера**; всё остальное — через `/v1/discovery`.
-```
