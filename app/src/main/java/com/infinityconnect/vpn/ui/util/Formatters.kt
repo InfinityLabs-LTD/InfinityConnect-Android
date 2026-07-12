@@ -1,6 +1,8 @@
 package com.infinityconnect.vpn.ui.util
 
 import com.infinityconnect.vpn.domain.model.AppError
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /** Человекочитаемое сообщение об ошибке для UI. */
@@ -48,3 +50,7 @@ fun formatDate(iso: String?): String {
     val parts = datePart.split("-")
     return if (parts.size == 3) "${parts[2]}.${parts[1]}.${parts[0]}" else iso
 }
+
+/** Форматирует epoch-миллисекунды в «ДД.ММ.ГГГГ ЧЧ:ММ». */
+fun formatDateTime(epochMs: Long): String =
+    SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(epochMs))
