@@ -32,7 +32,7 @@ app/src/main/java/com/infinityconnect/vpn/
 │   ├── VpnEngine / EngineSelector / VpnStateHolder / VpnController
 │   ├── InfinityVpnService   # TUN + foreground + выбор движка
 │   ├── xray/         # XrayEngine + мост к libv2ray (Xray-core)
-│   └── hysteria2/    # Hysteria2Engine (заглушка)
+│   └── hysteria2/    # Hysteria2Engine + мост + конфиг-билдер (libhysteria2.aar)
 ├── ui/               # Compose: auth / home (ключи+серверы, стиль Happ) / profile
 └── di/               # Hilt-модули (Network, Repository, Token)
 ```
@@ -119,16 +119,49 @@ API моста (`libv2ray.CoreController`, `Libv2ray.newCoreController`, `go.Seq
 - XUDP base key (`initCoreEnv`) — ровно 32 байта (иначе ядро паникует),
   см. `XrayCoreBridge.xudpBaseKey`.
 
-### Hysteria2 — заглушка
+### Hysteria2
 
 [Hysteria2Engine](app/src/main/java/com/infinityconnect/vpn/vpn/hysteria2/Hysteria2Engine.kt)
-пока не интегрирован. Для полной поддержки:
-1. Соберите AAR из [github.com/apernet/hysteria](https://github.com/apernet/hysteria)
-   через gomobile.
-2. Реализуйте `start()`: постройте конфиг из `EngineConfig.Hysteria2`
-   (server/auth/tls/obfs/bandwidth) и запустите клиент поверх TUN fd
-   (hysteria2 сам читает/пишет TUN — tun2socks не нужен).
-3. Пробросьте статистику в `queryStats()`.
+реализован по той же схеме, что и Xray: прямые вызовы gomobile-обёртки из
+[Hysteria2CoreBridge.kt](app/src/main/java/com/infinityconnect/vpn/vpn/hysteria2/Hysteria2CoreBridge.kt),
+конфиг клиента строит
+[Hysteria2ConfigBuilder.kt](app/src/main/java/com/infinityconnect/vpn/vpn/hysteria2/Hysteria2ConfigBuilder.kt).
+Сигнатуры-стабы — в модуле `libhysteria2-stub` (пакет `hysteria2`).
+
+Нативный AAR **собирается из исходников** обёртки в каталоге
+[hysteria2-mobile/](hysteria2-mobile/) — тонкий gomobile-слой над клиентом
+[apernet/hysteria](https://github.com/apernet/hysteria) v2 + userspace-стек
+sing-tun (системный стек) поверх TUN fd. Инструкция и рецепт сборки — в
+[hysteria2-mobile/README.md](hysteria2-mobile/README.md).
+
+Стек: форк `apernet/sing-tun` собран без gVisor (`WithGVisor=false`), поэтому
+обёртка использует **системный стек** (`NewStack("system")`). Ему нужен адрес
+TUN с префиксом — передаётся параметром `tunCidr` (по умолчанию `10.10.0.1/30`,
+согласован с `VpnService.Builder.addAddress("10.10.0.2", 30)`).
+
+Ключевой момент: `libv2ray.aar` (Xray) тоже собран gomobile и несёт общий
+рантайм (`go.Seq`, `libgojni.so`). Чтобы два AAR не конфликтовали (duplicate
+class / duplicate .so), рантайм hysteria2 переименован патчем тулчейна
+(`go`→`hy2go`, `libgojni.so`→`libhy2gojni.so`, JNI `Java_go_Seq_*`→
+`Java_hy2go_Seq_*`) + 16КБ-выравнивание LOAD (Android 15+). См.
+`hysteria2-mobile/apply-toolchain-patch.sh`.
+
+API AAR (сверено через `javap`): `Hysteria2.setContext(Protector)`,
+`Hysteria2.newTunnel(configJson, tunFd, mtu, tunCidr, handler)`,
+`Tunnel.close/uplinkBytes/downlinkBytes`. Клиент сам читает/пишет TUN
+(tun2socks не нужен); свой UDP-сокет QUIC защищает через `Protector`
+(VpnService.protect). Профиль — из `EngineConfig.Hysteria2`
+(server/auth/tls/obfs/bandwidth).
+
+Профиль Hysteria2 приходит двумя путями: как `hy2://` URI
+([Hysteria2UriParser](app/src/main/java/com/infinityconnect/vpn/domain/subscription/Hysteria2UriParser.kt))
+или как outbound `"protocol":"hysteria"` внутри JSON-конфига панели (Remnawave)
+— [SubscriptionParser](app/src/main/java/com/infinityconnect/vpn/domain/subscription/SubscriptionParser.kt)
+разбирает `hysteriaSettings`/`tlsSettings` в `EngineConfig.Hysteria2`.
+
+Переключение стаб ↔ AAR — в `app/build.gradle.kts`:
+`implementation(files("libs/libhysteria2.aar"))` (реальный) либо
+`compileOnly(project(":libhysteria2-stub"))` (только компиляция без AAR).
 
 ## Как работает подключение к серверу
 
@@ -146,16 +179,19 @@ API моста (`libv2ray.CoreController`, `Libv2ray.newCoreController`, `go.Seq
       TUN активен, статус «Подключено», статистика и таймер идут, отключение
       чистое. Реальная статистика трафика берётся из
       `queryAllOutboundTrafficStats()`.
-- [ ] **Hysteria2** — заглушка `Hysteria2Engine`. Для поддержки: собрать AAR из
-      [github.com/apernet/hysteria](https://github.com/apernet/hysteria),
-      реализовать `start()` (конфиг из `EngineConfig.Hysteria2`, клиент поверх
-      TUN fd — tun2socks не нужен) и `queryStats()`.
+- [x] **Hysteria2 — работает.** Собран `libhysteria2.aar` (gomobile-обёртка над
+      apernet/hysteria + sing-tun, см. [hysteria2-mobile/](hysteria2-mobile/)),
+      4 ABI, 16КБ-выравнивание. Движок `Hysteria2Engine` (мост, конфиг-билдер,
+      статистика, обработка разрыва) поднимает TUN через нативный клиент. На
+      эмуляторе (x86_64, Android 15) APK ставится и запускается, `libhy2gojni.so`
+      грузится без конфликта с Xray-рантаймом.
 
 ## Что осталось доделать вручную
 
 - [ ] Собрать `libv2ray.aar` на машине сборки (см. раздел выше) — бинарник не
       коммитится в git (96 МБ, в `.gitignore`).
-- [ ] Интегрировать `hysteria2.aar` (реализовать `Hysteria2Engine`).
+- [ ] Пересобрать `app/libs/libhysteria2.aar` при обновлении версии hysteria/NDK
+      (`hysteria2-mobile/build-aar.sh`) — бинарник в git не коммитится.
 - [ ] Уточнить соответствие индекса сервера из `/v1/config/servers` порядку
       профилей в подписке (при расхождении — матчить по `server_address`).
 - [ ] Сгенерировать `gradle-wrapper.jar` и иконки под нужные плотности при
