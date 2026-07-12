@@ -41,15 +41,25 @@ class XrayEngine @Inject constructor(
     /** Колбэк «ядро остановилось само» — сервис подхватывает разрыв. */
     var onCoreStopped: (() -> Unit)? = null
 
-    override fun supports(config: EngineConfig): Boolean = config is EngineConfig.Vless
+    override fun supports(config: EngineConfig): Boolean =
+        config is EngineConfig.Vless || config is EngineConfig.RawXray
 
     override fun start(service: VpnService, config: EngineConfig, tunFd: Int, mtu: Int) {
-        require(config is EngineConfig.Vless) { "XrayEngine поддерживает только VLESS" }
-
-        // Читаем актуальные настройки маршрутизации (режим + внешние правила).
-        val routing = runBlocking { routingRepository.current() }
-        val json = configBuilder.build(config, mtu = mtu, routing = routing)
-        Log.d(TAG, "Xray config построен для ${config.remark} (routing=${routing.mode})")
+        val json = when (config) {
+            // Готовый конфиг из подписки (автовыбор/balancer/WHITE) — пробрасываем
+            // целиком; серверный routing важнее пользовательского режима.
+            is EngineConfig.RawXray -> {
+                Log.d(TAG, "Xray raw-config проброшен для ${config.remark}")
+                configBuilder.buildRaw(config, mtu = mtu)
+            }
+            is EngineConfig.Vless -> {
+                // Читаем актуальные настройки маршрутизации (режим + внешние правила).
+                val routing = runBlocking { routingRepository.current() }
+                Log.d(TAG, "Xray config построен для ${config.remark} (routing=${routing.mode})")
+                configBuilder.build(config, mtu = mtu, routing = routing)
+            }
+            else -> throw IllegalArgumentException("XrayEngine поддерживает только VLESS/RawXray")
+        }
 
         val core = XrayCoreBridge(onCoreShutdown = { onCoreStopped?.invoke() })
         // Контекст самого VpnService — через него ядро вызывает protect().

@@ -104,6 +104,57 @@ class XrayConfigBuilder @Inject constructor(
     }
 
     /**
+     * Пробрасывает готовый Xray-конфиг из подписки ([EngineConfig.RawXray]) в
+     * ядро, подменяя его inbounds на TUN. Сохраняет outbounds, routing,
+     * balancers, dns и burstObservatory как есть — иначе потеряется автовыбор и
+     * fallback (balancer MAIN → скрытый WHITE-хост для обхода белых списков).
+     *
+     * Пользовательский режим маршрутизации (ALL/BYPASS_RU) для таких конфигов
+     * НЕ применяется: серверный routing уже содержит нужные правила, и его
+     * balancer'ы важнее клиентских предпочтений.
+     */
+    fun buildRaw(config: EngineConfig.RawXray, mtu: Int = DEFAULT_MTU): String {
+        val src = config.root
+        val root = buildJsonObject {
+            // log: приглушаем (в подписке может стоять debug).
+            putJsonObject("log") { put("loglevel", "none") }
+            // Статистика трафика по аутбаундам (для UI-счётчика скорости).
+            putJsonObject("stats") {}
+            putJsonObject("policy") {
+                putJsonObject("system") {
+                    put("statsOutboundUplink", true)
+                    put("statsOutboundDownlink", true)
+                }
+            }
+            // Сохраняем dns/routing/outbounds/balancers/burstObservatory из подписки.
+            src["dns"]?.let { put("dns", it) }
+            src["routing"]?.let { put("routing", it) }
+            src["outbounds"]?.let { put("outbounds", it) }
+            src["burstObservatory"]?.let { put("burstObservatory", it) }
+            src["observatory"]?.let { put("observatory", it) }
+            // Подменяем inbounds на наш TUN (socks/http из подписки не нужны).
+            putJsonArray("inbounds") { add(buildTunInbound(mtu)) }
+        }
+        return json.encodeToString(JsonObject.serializer(), root)
+    }
+
+    /** TUN-инбаунд форка xray-core: fd берётся ядром из env xray.tun.fd. */
+    private fun buildTunInbound(mtu: Int) = buildJsonObject {
+        put("tag", "tun")
+        put("protocol", "tun")
+        putJsonObject("settings") {
+            put("name", "tun0")
+            put("mtu", mtu)
+            putJsonArray("gateway") { add("$TUN_ADDRESS/30") }
+            putJsonArray("dns") { add("1.1.1.1"); add("8.8.8.8") }
+        }
+        putJsonObject("sniffing") {
+            put("enabled", true)
+            putJsonArray("destOverride") { add("http"); add("tls"); add("quic") }
+        }
+    }
+
+    /**
      * Минимальный конфиг для измерения задержки через ядро
      * (Libv2ray.measureOutboundDelay): один outbound «proxy» под профиль сервера,
      * без inbound/TUN/routing. Ядро само поднимает outbound, шлёт HTTP-запрос к

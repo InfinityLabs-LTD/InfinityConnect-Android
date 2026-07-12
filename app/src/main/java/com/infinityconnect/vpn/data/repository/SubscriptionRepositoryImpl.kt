@@ -1,6 +1,7 @@
 package com.infinityconnect.vpn.data.repository
 
 import com.infinityconnect.vpn.data.local.DeviceIdProvider
+import com.infinityconnect.vpn.data.local.SubscriptionCacheStore
 import com.infinityconnect.vpn.data.remote.api.RawApi
 import com.infinityconnect.vpn.domain.model.AppError
 import com.infinityconnect.vpn.domain.model.AppResult
@@ -16,19 +17,26 @@ import javax.inject.Singleton
 class SubscriptionRepositoryImpl @Inject constructor(
     private val rawApi: RawApi,
     private val deviceIdProvider: DeviceIdProvider,
+    private val cacheStore: SubscriptionCacheStore,
 ) : SubscriptionRepository {
 
     // Кэш тел подписок по URL. Живёт на процесс (Singleton) — серверы
     // предзагружаются один раз при авторизации/refresh и переиспользуются.
+    // Персистентная копия — на диске ([cacheStore]): переживает перезапуск,
+    // поэтому серверы доступны офлайн даже после закрытия приложения.
     private val cache = ConcurrentHashMap<String, SubscriptionBody>()
+
+    /** Достаёт тело из памяти, а при промахе — подгружает с диска в память. */
+    private fun cached(url: String): SubscriptionBody? =
+        cache[url] ?: cacheStore.load(url)?.also { cache[url] = it }
 
     // Сериализуем сетевые загрузки одного URL, чтобы параллельные selectKey не
     // порождали дублирующие запросы.
     private val fetchMutex = Mutex()
 
     override fun isFresh(subscriptionUrl: String): Boolean {
-        val cached = cache[subscriptionUrl] ?: return false
-        return !isStale(cached)
+        val body = cached(subscriptionUrl) ?: return false
+        return !isStale(body)
     }
 
     override suspend fun fetch(
@@ -39,29 +47,32 @@ class SubscriptionRepositoryImpl @Inject constructor(
             return AppResult.Failure(AppError.Parse("Пустой subscription_url"))
         }
 
-        // Свежий кэш — отдаём без сети (если не форсируем обновление).
-        cache[subscriptionUrl]?.let { cached ->
-            if (!forceRefresh && !isStale(cached)) {
-                return AppResult.Success(cached)
+        // Свежий кэш (память или диск) — отдаём без сети (если не форсируем).
+        cached(subscriptionUrl)?.let { body ->
+            if (!forceRefresh && !isStale(body)) {
+                return AppResult.Success(body)
             }
         }
 
         return fetchMutex.withLock {
             // Повторная проверка под локом: другой корутин мог уже загрузить.
-            cache[subscriptionUrl]?.let { cached ->
-                if (!forceRefresh && !isStale(cached)) {
-                    return@withLock AppResult.Success(cached)
+            cached(subscriptionUrl)?.let { body ->
+                if (!forceRefresh && !isStale(body)) {
+                    return@withLock AppResult.Success(body)
                 }
             }
 
             when (val result = fetchFromNetwork(subscriptionUrl)) {
                 is AppResult.Success -> {
                     cache[subscriptionUrl] = result.data
+                    // Персистим на диск — для офлайн-старта после перезапуска.
+                    cacheStore.save(subscriptionUrl, result.data)
                     AppResult.Success(result.data)
                 }
                 is AppResult.Failure -> {
-                    // Сеть недоступна, но есть кэш — отдаём его, чтобы не ломать UI.
-                    cache[subscriptionUrl]?.let { return@withLock AppResult.Success(it) }
+                    // Сеть недоступна, но есть кэш (память/диск) — отдаём его,
+                    // даже если он устарел: лучше показать серверы, чем пустоту.
+                    cached(subscriptionUrl)?.let { return@withLock AppResult.Success(it) }
                     result
                 }
             }

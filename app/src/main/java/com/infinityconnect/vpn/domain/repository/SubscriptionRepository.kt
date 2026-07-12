@@ -1,6 +1,7 @@
 package com.infinityconnect.vpn.domain.repository
 
 import com.infinityconnect.vpn.domain.model.AppResult
+import kotlinx.serialization.Serializable
 
 /**
  * Сырое тело подписки + метаданные обновления.
@@ -10,6 +11,7 @@ import com.infinityconnect.vpn.domain.model.AppResult
  * @param updateIntervalHours интервал автообновления из заголовка Remnawave
  *   `profile-update-interval` (по умолчанию 12 часов).
  */
+@Serializable
 data class SubscriptionBody(
     val raw: String,
     val fetchedAtMs: Long,

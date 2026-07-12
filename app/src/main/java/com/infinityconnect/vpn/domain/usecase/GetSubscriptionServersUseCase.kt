@@ -51,13 +51,18 @@ class GetSubscriptionServersUseCase @Inject constructor(
 /** Маппинг профиля движка в отображаемый сервер с meta-строкой. */
 private fun EngineConfig.toSubscriptionServer(index: Int): SubscriptionServer {
     val parts = buildList {
-        add(protocolLabel(protocol))
-        when (this@toSubscriptionServer) {
+        when (val cfg = this@toSubscriptionServer) {
             is EngineConfig.Vless -> {
-                add(transportLabel(transport))
-                securityLabel(security)?.let { add(it) }
+                add(protocolLabel(protocol))
+                add(transportLabel(cfg.transport))
+                securityLabel(cfg.security)?.let { add(it) }
             }
-            is EngineConfig.Hysteria2 -> add("UDP")
+            is EngineConfig.Hysteria2 -> {
+                add(protocolLabel(protocol))
+                add("UDP")
+            }
+            // Автовыбор/balancer с fallback (напр. «LTE | Все операторы»).
+            is EngineConfig.RawXray -> add("Авто")
         }
     }
     val flag = extractFlag(remark)

@@ -1,6 +1,7 @@
 package com.infinityconnect.vpn.domain.engine
 
 import com.infinityconnect.vpn.domain.model.VpnProtocol
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Разобранный профиль одного сервера подписки — вход для VPN-движка.
@@ -26,6 +27,35 @@ sealed interface EngineConfig {
         val security: Security,
         val flow: String? = null,
     ) : EngineConfig {
+        override val protocol: VpnProtocol get() = VpnProtocol.VLESS
+    }
+
+    /**
+     * Готовый Xray-конфиг из подписки, который пробрасывается в ядро почти как
+     * есть. Используется для «сложных» серверов панели (Remnawave), где один
+     * элемент подписки — это целый конфиг с несколькими outbounds, routing и
+     * balancers (например, автовыбор «LTE | Все операторы»: balancer по MAIN с
+     * fallback на скрытый WHITE-хост для обхода белых списков).
+     *
+     * Схлопнуть такой конфиг в один [Vless]-outbound нельзя — потеряется вся
+     * логика маршрутизации и fallback. Поэтому [remark] + оригинальный JSON
+     * несём целиком; движок лишь подменяет inbounds на TUN
+     * ([XrayConfigBuilder.buildRaw]).
+     *
+     * @param root корневой объект конфига (dns/routing/outbounds/…), как пришёл
+     *   в подписке.
+     * @param primaryOutbound первый proxy-outbound (для тест-пинга через ядро —
+     *   балансировщик пинговать смысла нет, меряем основной сервер).
+     */
+    data class RawXray(
+        override val remark: String,
+        val root: JsonObject,
+        val primaryOutbound: Vless?,
+    ) : EngineConfig {
+        // Адрес/порт берём из основного outbound (для UI/пинга); при отсутствии —
+        // заглушки, они не используются для самого подключения.
+        override val address: String get() = primaryOutbound?.address ?: "—"
+        override val port: Int get() = primaryOutbound?.port ?: 0
         override val protocol: VpnProtocol get() = VpnProtocol.VLESS
     }
 

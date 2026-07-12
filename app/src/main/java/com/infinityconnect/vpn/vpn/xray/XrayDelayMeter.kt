@@ -32,7 +32,13 @@ class XrayDelayMeter @Inject constructor(
      * прочих профилей возвращает -1 — вызывающий откатывается на TCP.
      */
     fun measure(config: EngineConfig, testUrl: String): Int {
-        val vless = config as? EngineConfig.Vless ?: return -1
+        // Для RawXray (автовыбор/balancer) меряем основной сервер (MAIN);
+        // пинговать сам балансировщик через тест-outbound смысла нет.
+        val vless = when (config) {
+            is EngineConfig.Vless -> config
+            is EngineConfig.RawXray -> config.primaryOutbound ?: return -1
+            else -> return -1
+        }
         return try {
             ensureEnv()
             val json = configBuilder.buildDelayTestConfig(vless)

@@ -90,18 +90,46 @@ class SubscriptionParser @Inject constructor(
 
     private fun parseSingleJsonConfig(config: JsonObject): EngineConfig? {
         val outbounds = config["outbounds"]?.jsonArray ?: return null
-        // Берём proxy-outbound: vless или hysteria(2). Пропускаем direct/block/freedom.
-        val proxy = outbounds.firstOrNull { ob ->
+        // Все proxy-outbounds (vless/hysteria). Пропускаем direct/block/freedom.
+        val proxies = outbounds.filter { ob ->
             (ob as? JsonObject)?.get("protocol")?.str() in PROXY_PROTOCOLS
-        }?.jsonObject ?: return null
+        }.map { it.jsonObject }
+        val proxy = proxies.firstOrNull() ?: return null
 
         val remark = config["remarks"]?.str()
             ?: config["remark"]?.str()
+
+        // «Сложный» конфиг (панель Remnawave): несколько proxy-outbounds или
+        // балансировщик/маршрутизация по нескольким outbound-тегам — например
+        // автовыбор «LTE | Все операторы» (balancer MAIN + fallback WHITE).
+        // Схлопывать в один сервер нельзя: потеряем routing и fallback.
+        // Пробрасываем конфиг в ядро целиком через EngineConfig.RawXray.
+        if (isComplexConfig(config, proxies)) {
+            val primary = parseVlessOutbound(proxy, remark) as? EngineConfig.Vless
+            return EngineConfig.RawXray(
+                remark = remark ?: primary?.address ?: "Авто",
+                root = config,
+                primaryOutbound = primary,
+            )
+        }
 
         return when (proxy["protocol"]?.str()) {
             "hysteria", "hysteria2" -> parseHysteriaOutbound(proxy, remark)
             else -> parseVlessOutbound(proxy, remark)
         }
+    }
+
+    /**
+     * Конфиг считается «сложным», если его нельзя свести к одному outbound без
+     * потери логики: несколько proxy-outbounds, либо в routing есть balancers,
+     * либо правила ссылаются на balancerTag / несколько разных outboundTag.
+     */
+    private fun isComplexConfig(config: JsonObject, proxies: List<JsonObject>): Boolean {
+        if (proxies.size > 1) return true
+        val routing = config["routing"]?.jsonObject ?: return false
+        if (routing["balancers"]?.jsonArray?.isNotEmpty() == true) return true
+        val rules = routing["rules"]?.jsonArray ?: return false
+        return rules.any { (it as? JsonObject)?.get("balancerTag") != null }
     }
 
     private fun parseVlessOutbound(proxy: JsonObject, remark: String?): EngineConfig? {
