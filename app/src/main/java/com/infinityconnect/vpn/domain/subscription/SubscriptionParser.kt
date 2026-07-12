@@ -33,6 +33,11 @@ class SubscriptionParser @Inject constructor(
     private val json: Json,
 ) {
 
+    private companion object {
+        /** Proxy-протоколы, которые считаем «сервером» в JSON-конфиге панели. */
+        val PROXY_PROTOCOLS = setOf("vless", "hysteria", "hysteria2")
+    }
+
     /** Разбирает полное тело подписки в список профилей. */
     fun parseSubscription(raw: String): List<EngineConfig> {
         val trimmed = raw.trim()
@@ -85,11 +90,21 @@ class SubscriptionParser @Inject constructor(
 
     private fun parseSingleJsonConfig(config: JsonObject): EngineConfig? {
         val outbounds = config["outbounds"]?.jsonArray ?: return null
-        // Берём proxy-outbound: vless. Пропускаем direct/block.
+        // Берём proxy-outbound: vless или hysteria(2). Пропускаем direct/block/freedom.
         val proxy = outbounds.firstOrNull { ob ->
-            (ob as? JsonObject)?.get("protocol")?.str() == "vless"
+            (ob as? JsonObject)?.get("protocol")?.str() in PROXY_PROTOCOLS
         }?.jsonObject ?: return null
 
+        val remark = config["remarks"]?.str()
+            ?: config["remark"]?.str()
+
+        return when (proxy["protocol"]?.str()) {
+            "hysteria", "hysteria2" -> parseHysteriaOutbound(proxy, remark)
+            else -> parseVlessOutbound(proxy, remark)
+        }
+    }
+
+    private fun parseVlessOutbound(proxy: JsonObject, remark: String?): EngineConfig? {
         val settings = proxy["settings"]?.jsonObject ?: return null
         val vnext = settings["vnext"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
         val address = vnext["address"]?.str() ?: return null
@@ -102,18 +117,50 @@ class SubscriptionParser @Inject constructor(
         val transport = parseTransport(stream)
         val security = parseSecurity(stream)
 
-        val remark = config["remarks"]?.str()
-            ?: config["remark"]?.str()
-            ?: address
-
         return EngineConfig.Vless(
-            remark = remark,
+            remark = remark ?: address,
             address = address,
             port = port,
             uuid = uuid,
             transport = transport,
             security = security,
             flow = flow,
+        )
+    }
+
+    /**
+     * Разбирает hysteria(2)-outbound из JSON-конфига панели. Форма (Remnawave/Happ):
+     * settings:{address,port}, streamSettings:{hysteriaSettings:{auth,obfs?},
+     * tlsSettings:{serverName,allowInsecure?}}.
+     */
+    private fun parseHysteriaOutbound(proxy: JsonObject, remark: String?): EngineConfig? {
+        val settings = proxy["settings"]?.jsonObject ?: return null
+        val address = settings["address"]?.str() ?: return null
+        val port = settings["port"]?.int() ?: return null
+
+        val stream = proxy["streamSettings"]?.jsonObject
+        val hy = stream?.get("hysteriaSettings")?.jsonObject
+        val tls = stream?.get("tlsSettings")?.jsonObject
+
+        val auth = hy?.get("auth")?.str()
+            ?: settings["auth"]?.str()
+            ?: ""
+        val obfsType = hy?.get("obfs")?.str()?.lowercase()
+        val obfsPassword = if (obfsType == "salamander" || hy?.get("obfsPassword") != null) {
+            hy?.get("obfsPassword")?.str() ?: hy?.get("obfs-password")?.str()
+        } else {
+            null
+        }
+
+        return EngineConfig.Hysteria2(
+            remark = remark ?: address,
+            address = address,
+            port = port,
+            auth = auth,
+            sni = tls?.get("serverName")?.str() ?: hy?.get("sni")?.str(),
+            insecure = tls?.get("allowInsecure")?.jsonPrimitive?.contentOrNull == "true" ||
+                hy?.get("insecure")?.jsonPrimitive?.contentOrNull == "true",
+            obfsPassword = obfsPassword,
         )
     }
 

@@ -1,26 +1,38 @@
 package com.infinityconnect.vpn.ui.home
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.SubscriptionServer
 import com.infinityconnect.vpn.domain.model.VpnKey
 import com.infinityconnect.vpn.domain.model.VpnProtocol
+import com.infinityconnect.vpn.ui.components.EmojiBadge
+import com.infinityconnect.vpn.ui.components.GlassCard
+import com.infinityconnect.vpn.ui.components.StatusPill
+import com.infinityconnect.vpn.ui.settings.pingColor
+import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.util.formatBytes
 import com.infinityconnect.vpn.ui.util.formatDate
 
@@ -32,69 +44,100 @@ fun KeyCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            },
-        ),
+    GlassCard(
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        highlighted = selected,
+        contentPadding = PaddingValues(14.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                text = key.countryFlag ?: "🌐",
-                style = MaterialTheme.typography.headlineSmall,
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = key.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = buildString {
-                        append(key.location ?: "—")
-                        append(" · ")
-                        append(protocolLabel(key.protocol))
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            EmojiBadge(emoji = key.countryFlag ?: "🌐", size = 46.dp)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = key.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = InfinityColors.OnSurface,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    ProtocolChip(key.protocol)
+                }
+                keyHost(key)?.let { host ->
+                    Text(
+                        text = host,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = InfinityColors.AccentBlue,
+                    )
+                }
                 key.expiresAt?.let {
                     Text(
-                        text = "До ${formatDate(it)}",
+                        text = "Активна до ${formatDate(it)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = InfinityColors.Muted,
                     )
                 }
                 if (key.trafficLimitBytes != null && key.trafficLimitBytes > 0) {
                     val used = key.usedTrafficBytes ?: 0
                     Text(
-                        text = "Трафик: ${formatBytes(used)} / ${formatBytes(key.trafficLimitBytes)}",
+                        text = "${formatBytes(used)} / ${formatBytes(key.trafficLimitBytes)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = InfinityColors.MutedDim,
                     )
                 }
             }
-            // Индикатор активности ключа.
             StatusDot(active = key.isActive)
         }
     }
 }
 
+/** Компактный чип протокола (VLESS / Hysteria2). */
+@Composable
+private fun ProtocolChip(protocol: VpnProtocol) {
+    val label = protocolLabel(protocol)
+    if (label == "—") return
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = InfinityColors.AccentBlue,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(InfinityColors.AccentBlue.copy(alpha = 0.12f))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    )
+}
+
 @Composable
 private fun StatusDot(active: Boolean) {
-    val color = if (active) Color(0xFF34C759) else Color(0xFF8E8E93)
-    androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp)) {
-        drawCircle(color)
-    }
+    val color by animateColorAsState(
+        if (active) InfinityColors.Mint else InfinityColors.MutedDim,
+        label = "dot",
+    )
+    Box(
+        modifier = Modifier
+            .size(10.dp)
+            .clip(RoundedCornerShape(50))
+            .background(color)
+            .border(3.dp, color.copy(alpha = 0.18f), RoundedCornerShape(50)),
+    )
+}
+
+/**
+ * Хост подписки для показа под именем: берём его из subscription_url
+ * (без схемы/пути/порта), иначе — из адреса сервера ключа.
+ */
+private fun keyHost(key: VpnKey): String? {
+    val fromUrl = key.subscriptionUrl
+        ?.substringAfter("://", "")
+        ?.substringBefore('/')
+        ?.substringBefore('?')
+        ?.substringBefore(':')
+        ?.takeIf { it.isNotBlank() }
+    return fromUrl ?: key.serverAddress?.takeIf { it.isNotBlank() }
 }
 
 private fun protocolLabel(p: VpnProtocol): String = when (p) {
@@ -104,73 +147,76 @@ private fun protocolLabel(p: VpnProtocol): String = when (p) {
 }
 
 /**
- * Строка сервера подписки (стиль Happ): флаг, имя, метаданные
- * (VLESS | TCP | Reality | JSON) и пинг справа. Вложена под ключом (отступ).
+ * Строка сервера подписки: флаг-иконка слева, имя, метаданные и пинг-пилл справа.
+ * Вложена под ключом (отступ). Выбранный — с акцентной вертикальной полосой.
  */
 @Composable
 fun ServerRow(
     server: SubscriptionServer,
     selected: Boolean,
+    pingMethod: PingMethod,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth().padding(start = 16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            },
-        ),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = server.flag ?: "🌐",
-                style = MaterialTheme.typography.titleLarge,
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 14.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) InfinityColors.SurfaceHi else InfinityColors.Surface)
+            .border(
+                width = 1.dp,
+                color = if (selected) InfinityColors.AccentBlue.copy(alpha = 0.55f) else InfinityColors.Stroke,
+                shape = RoundedCornerShape(16.dp),
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = server.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = server.meta,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            PingLabel(server.pingMs)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        EmojiBadge(emoji = server.flag ?: "🌐", size = 38.dp)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = server.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = InfinityColors.OnSurface,
+            )
+            Text(
+                text = server.meta,
+                style = MaterialTheme.typography.labelMedium,
+                color = InfinityColors.Muted,
+            )
         }
+        PingLabel(server.pingMs, pingMethod)
     }
 }
 
-/** Пинг: «478 мс» с цветом по качеству; «…» пока измеряется; «—» недоступен. */
+/**
+ * Пинг как цветной пилл. Значение всегда в мс; «…» пока измеряется; «—»
+ * недоступен. Цвет зависит от метода пинга (см. [pingColor]).
+ */
 @Composable
-private fun PingLabel(pingMs: Int?) {
-    val (text, color) = when {
-        pingMs == null -> "…" to MaterialTheme.colorScheme.onSurfaceVariant
-        pingMs < 0 -> "—" to Color(0xFF8E8E93)
-        pingMs < 150 -> "$pingMs мс" to Color(0xFF34C759)
-        pingMs < 400 -> "$pingMs мс" to Color(0xFFFF9500)
-        else -> "$pingMs мс" to Color(0xFFFF3B30)
+private fun PingLabel(pingMs: Int?, method: PingMethod) {
+    val text = when {
+        pingMs == null -> "…"
+        pingMs < 0 -> "—"
+        else -> "$pingMs мс"
     }
-    Text(text = text, style = MaterialTheme.typography.bodySmall, color = color)
+    StatusPill(text = text, color = pingColor(method, pingMs))
 }
 
 /** Индикатор загрузки списка серверов. */
 @Composable
 fun ServersLoadingRow(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(start = 14.dp, top = 6.dp, bottom = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        CircularProgressIndicator(
+            modifier = Modifier.size(22.dp),
+            strokeWidth = 2.dp,
+            color = InfinityColors.AccentBlue,
+        )
     }
 }

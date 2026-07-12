@@ -45,7 +45,7 @@ fun SubscriptionInfoDto.toDomain(): SubscriptionInfo = SubscriptionInfo(
 
 fun KeyDto.toDomain(): VpnKey = VpnKey(
     id = id,
-    name = name?.takeIf { it.isNotBlank() } ?: (location ?: "Ключ #$id"),
+    name = displayName(name) ?: (location ?: "Ключ #$id"),
     serverAddress = serverAddress,
     location = location,
     countryFlag = countryFlag,
@@ -56,6 +56,23 @@ fun KeyDto.toDomain(): VpnKey = VpnKey(
     protocol = VpnProtocol.from(protocol),
     subscriptionUrl = subscriptionUrl,
 )
+
+/**
+ * Отображаемое имя ключа: убираем служебный «@…local»-суффикс бота
+ * (например "danyamarello@bot.local" → "danyamarello"). Иные адреса с @
+ * (реальный e-mail) не трогаем.
+ */
+private fun displayName(raw: String?): String? {
+    val name = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val at = name.lastIndexOf('@')
+    if (at <= 0) return name
+    val domain = name.substring(at + 1).lowercase()
+    return if (domain.endsWith(".local") || domain == "bot.local") {
+        name.substring(0, at)
+    } else {
+        name
+    }
+}
 
 fun ServerEntryDto.toDomain(): ServerEntry = ServerEntry(
     index = index,

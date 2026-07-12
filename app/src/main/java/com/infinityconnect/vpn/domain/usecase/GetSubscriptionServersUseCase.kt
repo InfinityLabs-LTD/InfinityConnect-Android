@@ -24,7 +24,14 @@ class GetSubscriptionServersUseCase @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
     private val parser: SubscriptionParser,
 ) {
-    suspend operator fun invoke(keyId: Long): AppResult<List<SubscriptionServer>> {
+    /**
+     * @param forceRefresh обойти кэш и перезагрузить подписку (кнопка обновления).
+     *   По умолчанию false — серверы берутся из кэша (без спиннера при выборе ключа).
+     */
+    suspend operator fun invoke(
+        keyId: Long,
+        forceRefresh: Boolean = false,
+    ): AppResult<List<SubscriptionServer>> {
         val keyResult = keysRepository.key(keyId)
         val key = when (keyResult) {
             is AppResult.Success -> keyResult.data
@@ -33,8 +40,8 @@ class GetSubscriptionServersUseCase @Inject constructor(
         val subUrl = key.subscriptionUrl?.takeIf { it.isNotBlank() }
             ?: return AppResult.Success(emptyList())
 
-        return subscriptionRepository.fetchRawSubscription(subUrl).map { raw ->
-            parser.parseSubscription(raw).mapIndexed { index, cfg ->
+        return subscriptionRepository.fetch(subUrl, forceRefresh).map { body ->
+            parser.parseSubscription(body.raw).mapIndexed { index, cfg ->
                 cfg.toSubscriptionServer(index)
             }
         }
@@ -53,15 +60,31 @@ private fun EngineConfig.toSubscriptionServer(index: Int): SubscriptionServer {
             is EngineConfig.Hysteria2 -> add("UDP")
         }
     }
+    val flag = extractFlag(remark)
     return SubscriptionServer(
         index = index,
-        name = remark,
-        flag = extractFlag(remark),
+        // Имя без ведущего флага — флаг показывается отдельной иконкой слева.
+        name = stripLeadingFlag(remark).ifBlank { remark },
+        flag = flag,
         address = address,
         port = port,
         protocol = protocol,
         meta = parts.joinToString(" | "),
     )
+}
+
+/** Убирает ведущий emoji-флаг (пару региональных индикаторов) и пробелы. */
+private fun stripLeadingFlag(remark: String): String {
+    val trimmed = remark.trimStart()
+    if (trimmed.isEmpty()) return trimmed
+    val first = trimmed.codePointAt(0)
+    if (first !in 0x1F1E6..0x1F1FF) return trimmed
+    var idx = Character.charCount(first)
+    if (idx < trimmed.length) {
+        val second = trimmed.codePointAt(idx)
+        if (second in 0x1F1E6..0x1F1FF) idx += Character.charCount(second)
+    }
+    return trimmed.substring(idx).trimStart()
 }
 
 private fun protocolLabel(p: VpnProtocol): String = when (p) {

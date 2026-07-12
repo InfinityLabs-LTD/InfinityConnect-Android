@@ -53,11 +53,12 @@ class BuildConnectionUseCase @Inject constructor(
         subscriptionUrl: String,
         serverIndex: Int,
     ): EngineConfig? {
-        val raw = when (val r = subscriptionRepository.fetchRawSubscription(subscriptionUrl)) {
+        // Кэш подписки: при подключении используем уже загруженное тело.
+        val body = when (val r = subscriptionRepository.fetch(subscriptionUrl)) {
             is AppResult.Success -> r.data
             is AppResult.Failure -> return null
         }
-        val configs = parser.parseSubscription(raw)
+        val configs = parser.parseSubscription(body.raw)
         if (configs.isEmpty()) return null
         // Индекс сервера соответствует порядку в подписке; при выходе за границы
         // берём первый профиль как безопасный дефолт.

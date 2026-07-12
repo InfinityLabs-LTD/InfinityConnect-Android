@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
             InfinityTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
+                    color = com.infinityconnect.vpn.ui.theme.InfinityColors.Space,
                 ) {
                     AppNavHost()
                 }

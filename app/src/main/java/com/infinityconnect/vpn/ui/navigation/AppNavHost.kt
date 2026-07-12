@@ -15,6 +15,7 @@ import com.infinityconnect.vpn.ui.components.FullScreenLoading
 import com.infinityconnect.vpn.ui.components.FullScreenMessage
 import com.infinityconnect.vpn.ui.home.HomeScreen
 import com.infinityconnect.vpn.ui.profile.ProfileScreen
+import com.infinityconnect.vpn.ui.settings.SettingsScreen
 
 /**
  * Корневой навигационный граф. Домен сервера фиксирован, экрана онбординга нет:
@@ -63,8 +64,15 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.HOME) {
+            val toAuth: () -> Unit = {
+                navController.navigate(Routes.AUTH) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
             HomeScreen(
                 onOpenProfile = { navController.navigate(Routes.PROFILE) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onLogout = toAuth,
             )
         }
 
@@ -77,6 +85,10 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                     }
                 },
             )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }
