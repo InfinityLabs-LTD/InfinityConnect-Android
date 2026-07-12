@@ -99,6 +99,11 @@ dependencies {
     implementation(files("libs/libv2ray.aar"))
     // compileOnly(project(":libv2ray-stub"))
 
-    // Hysteria2 (заглушка-движок; интеграция AAR — см. README).
-    // implementation(files("libs/hysteria2.aar"))
+    // Нативный клиент Hysteria2: обёртка github.com/infinityconnect/hysteria2mobile
+    // над apernet/hysteria (пакет hysteria2), собрана gomobile. Реальный AAR
+    // подключён. Стаб (:libhysteria2-stub) используется только когда AAR
+    // отсутствует — тогда закомментируйте строку ниже и раскомментируйте
+    // compileOnly(project(":libhysteria2-stub")). См. README.
+    implementation(files("libs/libhysteria2.aar"))
+    // compileOnly(project(":libhysteria2-stub"))
 }

@@ -5,9 +5,11 @@ import android.net.VpnService
 import android.util.Log
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.domain.engine.XrayConfigBuilder
+import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import com.infinityconnect.vpn.vpn.TunnelStats
 import com.infinityconnect.vpn.vpn.VpnEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,6 +30,7 @@ import javax.inject.Singleton
 class XrayEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val configBuilder: XrayConfigBuilder,
+    private val routingRepository: RoutingRepository,
 ) : VpnEngine {
 
     @Volatile
@@ -43,8 +46,10 @@ class XrayEngine @Inject constructor(
     override fun start(service: VpnService, config: EngineConfig, tunFd: Int, mtu: Int) {
         require(config is EngineConfig.Vless) { "XrayEngine поддерживает только VLESS" }
 
-        val json = configBuilder.build(config, mtu = mtu)
-        Log.d(TAG, "Xray config построен для ${config.remark}")
+        // Читаем актуальные настройки маршрутизации (режим + внешние правила).
+        val routing = runBlocking { routingRepository.current() }
+        val json = configBuilder.build(config, mtu = mtu, routing = routing)
+        Log.d(TAG, "Xray config построен для ${config.remark} (routing=${routing.mode})")
 
         val core = XrayCoreBridge(onCoreShutdown = { onCoreStopped?.invoke() })
         // Контекст самого VpnService — через него ядро вызывает protect().

@@ -83,10 +83,10 @@ class InfinityVpnService : VpnService() {
                 tunInterface = tun
 
                 // Если ядро само остановится (разрыв) — отражаем это в UI.
-                if (engine is com.infinityconnect.vpn.vpn.xray.XrayEngine) {
-                    engine.onCoreStopped = {
-                        if (activeEngine != null) stopWithError("Соединение разорвано")
-                    }
+                val onCoreStopped = { if (activeEngine != null) stopWithError("Соединение разорвано") }
+                when (engine) {
+                    is com.infinityconnect.vpn.vpn.xray.XrayEngine -> engine.onCoreStopped = onCoreStopped
+                    is com.infinityconnect.vpn.vpn.hysteria2.Hysteria2Engine -> engine.onCoreStopped = onCoreStopped
                 }
 
                 // Запуск движка (блокирующая инициализация).

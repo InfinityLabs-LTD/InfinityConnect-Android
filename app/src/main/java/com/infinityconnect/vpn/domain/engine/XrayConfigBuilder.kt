@@ -1,6 +1,9 @@
 package com.infinityconnect.vpn.domain.engine
 
+import com.infinityconnect.vpn.domain.model.RoutingMode
+import com.infinityconnect.vpn.domain.model.RoutingSettings
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
@@ -41,6 +44,7 @@ class XrayConfigBuilder @Inject constructor(
         config: EngineConfig.Vless,
         mtu: Int = DEFAULT_MTU,
         enableLogging: Boolean = false,
+        routing: RoutingSettings = RoutingSettings(),
     ): String {
         val root = buildJsonObject {
             putJsonObject("log") {
@@ -94,28 +98,61 @@ class XrayConfigBuilder @Inject constructor(
                     put("protocol", "blackhole")
                 }
             }
-            putJsonObject("routing") {
-                put("domainStrategy", "AsIs")
-                putJsonArray("rules") {
-                    // Приватные/локальные сети — напрямую, мимо прокси.
-                    // Явные CIDR (не geoip:private), чтобы не требовать geoip.dat.
+            put("routing", buildRouting(routing))
+        }
+        return json.encodeToString(JsonObject.serializer(), root)
+    }
+
+    /**
+     * Строит блок routing по режиму:
+     *  - приватные сети всегда direct (первым правилом);
+     *  - ALL: остальной трафик в proxy (нет доп. правил);
+     *  - BYPASS_RU: российские домены/ip — direct, остальное proxy;
+     *  - CUSTOM: правила из загруженного внешнего конфига (rulesJson);
+     *    если правил нет — ведём себя как ALL.
+     */
+    private fun buildRouting(routing: RoutingSettings) = buildJsonObject {
+        put("domainStrategy", "IPIfNonMatch")
+        putJsonArray("rules") {
+            // 1) Приватные/локальные сети — напрямую, мимо прокси.
+            // Явные CIDR (не geoip:private), чтобы не требовать geoip.dat.
+            addJsonObject {
+                put("type", "field")
+                put("outboundTag", "direct")
+                putJsonArray("ip") {
+                    add("10.0.0.0/8")
+                    add("172.16.0.0/12")
+                    add("192.168.0.0/16")
+                    add("127.0.0.0/8")
+                    add("::1/128")
+                    add("fc00::/7")
+                    add("fe80::/10")
+                }
+            }
+            when (routing.mode) {
+                RoutingMode.ALL -> { /* всё остальное — proxy по умолчанию */ }
+                RoutingMode.BYPASS_RU -> {
+                    // Российские домены — напрямую. По доменам (не geoip:ru),
+                    // чтобы не требовать geoip.dat в ассетах ядра.
                     addJsonObject {
                         put("type", "field")
                         put("outboundTag", "direct")
-                        putJsonArray("ip") {
-                            add("10.0.0.0/8")
-                            add("172.16.0.0/12")
-                            add("192.168.0.0/16")
-                            add("127.0.0.0/8")
-                            add("::1/128")
-                            add("fc00::/7")
-                            add("fe80::/10")
+                        putJsonArray("domain") {
+                            add("regexp:.*\\.ru$")
+                            add("regexp:.*\\.su$")
+                            add("regexp:.*\\.рф$")
+                            RU_DOMAINS.forEach { add("domain:$it") }
                         }
                     }
                 }
+                RoutingMode.CUSTOM -> {
+                    // Подмешиваем правила из внешнего конфига (если загружены).
+                    routing.rulesJson
+                        ?.let { runCatching { json.parseToJsonElement(it) as? JsonArray }.getOrNull() }
+                        ?.forEach { add(it) }
+                }
             }
         }
-        return json.encodeToString(JsonObject.serializer(), root)
     }
 
     private fun buildVlessOutbound(config: EngineConfig.Vless) = buildJsonObject {
@@ -197,5 +234,18 @@ class XrayConfigBuilder @Inject constructor(
     private companion object {
         const val DEFAULT_MTU = 1500
         const val TUN_ADDRESS = "10.10.0.2"
+
+        /**
+         * Популярные российские сервисы для режима «обход РФ» (direct).
+         * Дополняет regexp по зонам .ru/.su/.рф — на случай сервисов в других
+         * зонах (.com/.net). Список компактный; полноценные списки грузятся
+         * через режим CUSTOM (внешний конфиг правил).
+         */
+        val RU_DOMAINS = listOf(
+            "vk.com", "vk.ru", "vk.cc", "mail.ru", "yandex.ru", "ya.ru",
+            "gosuslugi.ru", "sberbank.ru", "tinkoff.ru", "alfabank.ru",
+            "ozon.ru", "wildberries.ru", "wb.ru", "avito.ru", "2gis.ru",
+            "kinopoisk.ru", "rutube.ru", "dzen.ru", "hh.ru",
+        )
     }
 }
