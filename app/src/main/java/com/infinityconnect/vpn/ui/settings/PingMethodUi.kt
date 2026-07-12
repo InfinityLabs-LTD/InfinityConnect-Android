@@ -6,6 +6,7 @@ import com.infinityconnect.vpn.ui.theme.InfinityColors
 
 /** Отображаемое название метода пинга. */
 fun PingMethod.title(): String = when (this) {
+    PingMethod.REAL -> "Реальный (через протокол)"
     PingMethod.PROXY_GET -> "Через прокси (GET)"
     PingMethod.PROXY_HEAD -> "Через прокси (HEAD)"
     PingMethod.TCP -> "TCP"
@@ -14,6 +15,8 @@ fun PingMethod.title(): String = when (this) {
 
 /** Пояснение метода пинга для настроек. */
 fun PingMethod.description(): String = when (this) {
+    PingMethod.REAL ->
+        "Задержка через сам протокол сервера (ядро Xray): HTTP-запрос к тест-URL через VLESS/Reality. Самый точный метод. Для Hysteria2 — откат на TCP."
     PingMethod.PROXY_GET ->
         "HTTP GET до тест-URL: полный ответ. Ближе всего к реальной задержке сайта, но значения выше."
     PingMethod.PROXY_HEAD ->
@@ -30,6 +33,7 @@ fun PingMethod.description(): String = when (this) {
  * своя для каждого.
  */
 fun PingMethod.baseColor(): Color = when (this) {
+    PingMethod.REAL -> InfinityColors.PingReal
     PingMethod.TCP -> InfinityColors.PingTcp
     PingMethod.ICMP -> InfinityColors.PingIcmp
     PingMethod.PROXY_GET -> InfinityColors.PingGet
@@ -38,6 +42,8 @@ fun PingMethod.baseColor(): Color = when (this) {
 
 /** Порог «хорошо/средне» в мс — зависит от метода (HTTP медленнее TCP/ICMP). */
 private fun PingMethod.thresholds(): Pair<Int, Int> = when (this) {
+    // REAL идёт через протокол (TLS+HTTP), значения выше чистого TCP/ICMP.
+    PingMethod.REAL -> 200 to 500
     PingMethod.TCP, PingMethod.ICMP -> 100 to 250
     PingMethod.PROXY_GET, PingMethod.PROXY_HEAD -> 300 to 700
 }

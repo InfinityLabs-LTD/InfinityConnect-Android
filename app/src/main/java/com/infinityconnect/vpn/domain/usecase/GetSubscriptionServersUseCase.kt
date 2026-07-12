@@ -70,6 +70,7 @@ private fun EngineConfig.toSubscriptionServer(index: Int): SubscriptionServer {
         port = port,
         protocol = protocol,
         meta = parts.joinToString(" | "),
+        config = this,
     )
 }
 

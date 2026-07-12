@@ -217,7 +217,7 @@ class HomeViewModel @Inject constructor(
             val gate = Semaphore(PING_CONCURRENCY)
             val jobs = servers.map { server ->
                 launch {
-                    val ping = gate.withPermit { pingServer(server.address, server.port) }
+                    val ping = gate.withPermit { pingServer(server) }
                     // Сохраняем пинг в кэш ключа, чтобы не мерить заново при возврате.
                     serversByKey[keyId] = serversByKey[keyId].orEmpty().map {
                         if (it.index == server.index) it.copy(pingMs = ping) else it
@@ -270,7 +270,11 @@ class HomeViewModel @Inject constructor(
     fun connectAfterPermission() = connect()
 
     private companion object {
-        /** Максимум одновременных измерений пинга (см. [pingAll]). */
-        const val PING_CONCURRENCY = 4
+        /**
+         * Максимум одновременных измерений пинга (см. [pingAll]). Держим низким:
+         * параллельные TCP-хендшейки конкурируют за сеть и планировщик и дают
+         * всплески задержки (тот же метод — то 20–30 мс, то ~400).
+         */
+        const val PING_CONCURRENCY = 2
     }
 }

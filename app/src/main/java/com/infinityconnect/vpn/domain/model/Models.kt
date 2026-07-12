@@ -61,6 +61,8 @@ data class VpnKey(
     val trafficLimitBytes: Long?,
     val protocol: VpnProtocol,
     val subscriptionUrl: String?,
+    /** Премиум-ключ (его сервер — премиум-хост): корона вместо глобуса в UI. */
+    val isPremium: Boolean = false,
 )
 
 /** Элемент списка серверов ключа (GET /v1/config/servers). */
@@ -84,6 +86,11 @@ data class SubscriptionServer(
     val protocol: VpnProtocol,
     /** Строка метаданных вида "VLESS | TCP | Reality | JSON". */
     val meta: String,
+    /**
+     * Полный профиль движка этого сервера — нужен для «реального» пинга через
+     * ядро (measureOutboundDelay строит outbound по нему). Не для отображения.
+     */
+    val config: com.infinityconnect.vpn.domain.engine.EngineConfig,
     /** Пинг в мс; null — ещё не измерен, -1 — недоступен. */
     val pingMs: Int? = null,
 )

@@ -7,6 +7,14 @@ package com.infinityconnect.vpn.domain.model
  * метода (HTTP-методы дают бОльшие значения, чем TCP/ICMP).
  */
 enum class PingMethod {
+    /**
+     * «Реальный» пинг: HTTP-запрос к тест-URL, проведённый ЧЕРЕЗ сам протокол
+     * сервера ядром Xray (Libv2ray.measureOutboundDelay) — как в v2RayTun/Happ.
+     * Меряет end-to-end задержку через VLESS/Reality, а не голый TCP до хоста.
+     * Для Hysteria2 (другое ядро) откатывается на TCP.
+     */
+    REAL,
+
     /** HTTP(S) GET через прокси-сервер до тест-URL: полный ответ (реальная задержка сайта). */
     PROXY_GET,
 

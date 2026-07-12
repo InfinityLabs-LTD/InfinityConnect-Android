@@ -191,10 +191,11 @@ private fun HomeContent(
                 )
             }
             // Под каждым ключом раскрываем список его серверов, если ключ выбран.
-            ui.keys.forEach { key ->
+            ui.keys.forEachIndexed { index, key ->
                 item(key = "key-${key.id}") {
                     KeyCard(
                         key = key,
+                        number = index + 1,
                         selected = key.id == ui.selectedKeyId,
                         onClick = { onSelectKey(key.id) },
                     )

@@ -29,4 +29,9 @@ data class KeyDto(
     @SerialName("traffic_limit_bytes") val trafficLimitBytes: Long? = null,
     @SerialName("protocol") val protocol: String? = null,
     @SerialName("subscription_url") val subscriptionUrl: String? = null,
+    /**
+     * Премиум-ключ: его сервер (host_name) — премиум-хост (обслуживает план с
+     * is_premium=1). Опционально: старые версии API не отдают → false.
+     */
+    @SerialName("is_premium") val isPremium: Boolean = false,
 )

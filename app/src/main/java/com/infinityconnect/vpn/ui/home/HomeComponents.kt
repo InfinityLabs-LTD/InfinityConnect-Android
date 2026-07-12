@@ -40,6 +40,7 @@ import com.infinityconnect.vpn.ui.util.formatDate
 @Composable
 fun KeyCard(
     key: VpnKey,
+    number: Int,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -54,24 +55,20 @@ fun KeyCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            EmojiBadge(emoji = key.countryFlag ?: "🌐", size = 46.dp)
+            // Значок: корона у премиум-ключа (его сервер — премиум-хост),
+            // иначе глобус (обычная подписка / «все сервера»).
+            EmojiBadge(emoji = if (key.isPremium) "👑" else "🌐", size = 46.dp)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = key.name,
+                        // Порядковый номер ключа у пользователя; название — в скобках.
+                        text = keyTitle(number, key.name),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = InfinityColors.OnSurface,
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     ProtocolChip(key.protocol)
-                }
-                keyHost(key)?.let { host ->
-                    Text(
-                        text = host,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = InfinityColors.AccentBlue,
-                    )
                 }
                 key.expiresAt?.let {
                     Text(
@@ -127,17 +124,13 @@ private fun StatusDot(active: Boolean) {
 }
 
 /**
- * Хост подписки для показа под именем: берём его из subscription_url
- * (без схемы/пути/порта), иначе — из адреса сервера ключа.
+ * Заголовок ключа: порядковый номер у пользователя, а название — в скобках,
+ * если оно есть и осмысленно (не совпадает с дефолтным «Ключ #id»).
  */
-private fun keyHost(key: VpnKey): String? {
-    val fromUrl = key.subscriptionUrl
-        ?.substringAfter("://", "")
-        ?.substringBefore('/')
-        ?.substringBefore('?')
-        ?.substringBefore(':')
-        ?.takeIf { it.isNotBlank() }
-    return fromUrl ?: key.serverAddress?.takeIf { it.isNotBlank() }
+private fun keyTitle(number: Int, name: String): String {
+    val label = name.trim()
+    val hasName = label.isNotBlank() && !label.startsWith("Ключ #")
+    return if (hasName) "Ключ $number ($label)" else "Ключ $number"
 }
 
 private fun protocolLabel(p: VpnProtocol): String = when (p) {

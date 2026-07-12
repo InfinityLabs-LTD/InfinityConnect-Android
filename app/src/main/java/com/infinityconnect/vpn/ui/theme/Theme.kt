@@ -37,7 +37,8 @@ object InfinityColors {
     val MutedDim = Color(0xFF5C6683)      // самый приглушённый
 
     // Базовые цвета пинг-пилла по методу измерения (окрашивают шкалу качества).
-    val PingTcp = Mint
+    val PingReal = Mint          // «реальный» пинг через ядро — флагманский
+    val PingTcp = AccentBlue
     val PingIcmp = AccentCyan
     val PingGet = AccentIndigo
     val PingHead = Color(0xFF9B7BFF)
