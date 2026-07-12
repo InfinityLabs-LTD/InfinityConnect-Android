@@ -4,12 +4,14 @@ import com.infinityconnect.vpn.data.repository.AuthRepositoryImpl
 import com.infinityconnect.vpn.data.repository.ConfigRepositoryImpl
 import com.infinityconnect.vpn.data.repository.DiscoveryRepositoryImpl
 import com.infinityconnect.vpn.data.repository.KeysRepositoryImpl
+import com.infinityconnect.vpn.data.repository.RoutingRepositoryImpl
 import com.infinityconnect.vpn.data.repository.SubscriptionRepositoryImpl
 import com.infinityconnect.vpn.data.repository.UserRepositoryImpl
 import com.infinityconnect.vpn.domain.repository.AuthRepository
 import com.infinityconnect.vpn.domain.repository.ConfigRepository
 import com.infinityconnect.vpn.domain.repository.DiscoveryRepository
 import com.infinityconnect.vpn.domain.repository.KeysRepository
+import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import com.infinityconnect.vpn.domain.repository.SubscriptionRepository
 import com.infinityconnect.vpn.domain.repository.UserRepository
 import dagger.Binds
@@ -46,4 +48,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSubscriptionRepository(impl: SubscriptionRepositoryImpl): SubscriptionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRoutingRepository(impl: RoutingRepositoryImpl): RoutingRepository
 }
