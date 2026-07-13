@@ -27,6 +27,7 @@ object InfinityColors {
     val AccentBlue = Color(0xFF9D5CFF)    // основной акцент (фиолетовый)
     val AccentIndigo = Color(0xFF6C3CFF)  // глубокий индиго-фиолет
     val AccentCyan = Color(0xFFC77DFF)    // светлый пурпурно-розовый
+    val AccentMagenta = Color(0xFFE85CD8) // розово-маджента (тёплый край градиента)
 
     val Mint = Color(0xFF22E1A1)          // подключено
     val Coral = Color(0xFFFF5A6E)         // ошибка / отключить
@@ -55,10 +56,10 @@ data class InfinityGradients(
 
 private val gradients = InfinityGradients(
     accent = Brush.linearGradient(
-        listOf(InfinityColors.AccentBlue, InfinityColors.AccentIndigo),
+        listOf(InfinityColors.AccentIndigo, InfinityColors.AccentBlue, InfinityColors.AccentMagenta),
     ),
     accentSoft = Brush.linearGradient(
-        listOf(InfinityColors.AccentBlue.copy(alpha = 0.20f), InfinityColors.AccentIndigo.copy(alpha = 0.06f)),
+        listOf(InfinityColors.AccentBlue.copy(alpha = 0.20f), InfinityColors.AccentMagenta.copy(alpha = 0.06f)),
     ),
     connected = Brush.linearGradient(
         listOf(InfinityColors.Mint, InfinityColors.AccentCyan),

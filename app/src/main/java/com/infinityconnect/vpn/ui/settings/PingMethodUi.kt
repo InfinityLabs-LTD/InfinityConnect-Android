@@ -49,15 +49,16 @@ private fun PingMethod.thresholds(): Pair<Int, Int> = when (this) {
 }
 
 /**
- * Итоговый цвет пинг-значения: базовый оттенок метода, приглушённый по качеству
- * (хорошо → яркий базовый, средне → янтарный, плохо → коралловый).
+ * Итоговый цвет пинг-значения по КАЧЕСТВУ связи: хорошо → зелёный (мятный),
+ * средне → янтарный, плохо → коралловый. Пороги зависят от метода измерения
+ * (HTTP-методы медленнее чистого TCP/ICMP).
  */
 fun pingColor(method: PingMethod, pingMs: Int?): Color {
     if (pingMs == null) return InfinityColors.Muted
     if (pingMs < 0) return InfinityColors.MutedDim
     val (good, mid) = method.thresholds()
     return when {
-        pingMs < good -> method.baseColor()
+        pingMs < good -> InfinityColors.Mint
         pingMs < mid -> InfinityColors.Amber
         else -> InfinityColors.Coral
     }

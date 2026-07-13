@@ -150,6 +150,8 @@ fun ServerRow(
     pingMethod: PingMethod,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Сервер с наименьшим пингом в подписке — показываем бейдж «Быстрейший». */
+    isFastest: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -168,12 +170,16 @@ fun ServerRow(
     ) {
         EmojiBadge(emoji = server.flag ?: "🌐", size = 38.dp)
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = server.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = InfinityColors.OnSurface,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = server.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = InfinityColors.OnSurface,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (isFastest) FastestBadge()
+            }
             Text(
                 text = server.meta,
                 style = MaterialTheme.typography.labelMedium,
@@ -196,6 +202,21 @@ private fun PingLabel(pingMs: Int?, method: PingMethod) {
         else -> "$pingMs мс"
     }
     StatusPill(text = text, color = pingColor(method, pingMs))
+}
+
+/** Бейдж «⚡ Быстрейший» на сервере с наименьшим пингом в подписке. */
+@Composable
+private fun FastestBadge() {
+    Text(
+        text = "⚡ Быстрейший",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = InfinityColors.Mint,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(InfinityColors.Mint.copy(alpha = 0.12f))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    )
 }
 
 /** Индикатор загрузки списка серверов. */

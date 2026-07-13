@@ -154,7 +154,7 @@ fun ConnectHero(
                         colors = if (connected) {
                             listOf(InfinityColors.Mint, InfinityColors.AccentCyan)
                         } else {
-                            listOf(InfinityColors.AccentBlue, InfinityColors.AccentIndigo)
+                            listOf(InfinityColors.AccentIndigo, InfinityColors.AccentMagenta)
                         },
                     ),
                     radius = size.minDimension / 2,

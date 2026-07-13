@@ -136,6 +136,7 @@ fun HomeScreen(
                 onRefresh = { viewModel.refresh() },
                 onPingAll = { viewModel.pingAllSelected() },
                 onSelectServer = viewModel::selectServer,
+                onSelectKey = viewModel::selectKey,
                 onToggle = {
                     if (viewModel.isConnectingOrConnected()) {
                         viewModel.disconnect()
@@ -163,6 +164,7 @@ private fun HomeContent(
     onRefresh: () -> Unit,
     onPingAll: () -> Unit,
     onSelectServer: (Long, com.infinityconnect.vpn.domain.model.SubscriptionServer) -> Unit,
+    onSelectKey: (Long) -> Unit,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -213,6 +215,7 @@ private fun HomeContent(
                         selectedServerIndex = ui.selectedServerIndex,
                         pingMethod = ui.pingMethod,
                         onSelectServer = onSelectServer,
+                        onSelectKey = onSelectKey,
                     )
                 }
             }
@@ -222,9 +225,10 @@ private fun HomeContent(
 }
 
 /**
- * Группа одной подписки: карточка-ключ и раскрытый под ней список её серверов,
- * объединённые общим контейнером с приподнятым фоном и вертикальным
- * коннектором — чтобы граница между подписками читалась.
+ * Группа одной подписки: карточка-ключ и её серверы в общем контейнере.
+ * Серверы раскрыты только у ВЫБРАННОЙ подписки; остальные свёрнуты со сводкой
+ * (лучший пинг, число серверов) — тап по ключу разворачивает группу. У сервера
+ * с наименьшим пингом в группе — бейдж «⚡ Быстрейший».
  */
 @Composable
 private fun KeyGroup(
@@ -236,8 +240,14 @@ private fun KeyGroup(
     selectedServerIndex: Int,
     pingMethod: com.infinityconnect.vpn.domain.model.PingMethod,
     onSelectServer: (Long, com.infinityconnect.vpn.domain.model.SubscriptionServer) -> Unit,
+    onSelectKey: (Long) -> Unit,
 ) {
     val isSelectedKey = key.id == selectedKeyId
+    // Индекс сервера с наименьшим пингом (валидным) — для бейджа «Быстрейший».
+    val fastestIndex = servers
+        .filter { (it.pingMs ?: -1) >= 0 }
+        .minByOrNull { it.pingMs ?: Int.MAX_VALUE }
+        ?.index
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -249,28 +259,79 @@ private fun KeyGroup(
                 else InfinityColors.Stroke,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
             )
-            .padding(start = 6.dp, top = 6.dp, end = 6.dp, bottom = 12.dp),
+            .padding(start = 6.dp, top = 6.dp, end = 6.dp, bottom = if (isSelectedKey) 12.dp else 6.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Подсветку выделения несёт контейнер группы, поэтому саму карточку-ключ
-        // не подсвечиваем — иначе двойная рамка.
+        // не подсвечиваем — иначе двойная рамка. Тап по свёрнутому ключу —
+        // выбирает подписку и разворачивает её серверы.
         KeyCard(
             key = key,
             number = number,
             selected = false,
-            onClick = { },
+            onClick = { if (!isSelectedKey) onSelectKey(key.id) },
         )
-        if (loading) {
-            ServersLoadingRow()
-        }
-        servers.forEach { server ->
-            ServerRow(
-                server = server,
-                selected = isSelectedKey && server.index == selectedServerIndex,
+        if (isSelectedKey) {
+            if (loading) {
+                ServersLoadingRow()
+            }
+            servers.forEach { server ->
+                ServerRow(
+                    server = server,
+                    selected = server.index == selectedServerIndex,
+                    pingMethod = pingMethod,
+                    isFastest = server.index == fastestIndex,
+                    onClick = { onSelectServer(key.id, server) },
+                )
+            }
+        } else {
+            // Свёрнутая подписка — компактная сводка.
+            CollapsedSummary(
+                serverCount = servers.size,
+                bestPing = servers.mapNotNull { it.pingMs?.takeIf { p -> p >= 0 } }.minOrNull(),
                 pingMethod = pingMethod,
-                onClick = { onSelectServer(key.id, server) },
+                loading = loading,
             )
         }
+    }
+}
+
+/** Сводка свёрнутой подписки: число серверов и лучший пинг. */
+@Composable
+private fun CollapsedSummary(
+    serverCount: Int,
+    bestPing: Int?,
+    pingMethod: com.infinityconnect.vpn.domain.model.PingMethod,
+    loading: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = when {
+                loading -> "Загрузка серверов…"
+                serverCount == 0 -> "Нет серверов"
+                else -> "$serverCount ${plural(serverCount, "сервер", "сервера", "серверов")} · нажмите, чтобы выбрать"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = InfinityColors.Muted,
+        )
+        bestPing?.let {
+            StatusPill(text = "⚡ $it мс", color = com.infinityconnect.vpn.ui.settings.pingColor(pingMethod, it))
+        }
+    }
+}
+
+/** Множественное число (день/дня/дней). */
+private fun plural(n: Int, one: String, few: String, many: String): String {
+    val m10 = n % 10
+    val m100 = n % 100
+    return when {
+        m10 == 1 && m100 != 11 -> one
+        m10 in 2..4 && m100 !in 12..14 -> few
+        else -> many
     }
 }
 
