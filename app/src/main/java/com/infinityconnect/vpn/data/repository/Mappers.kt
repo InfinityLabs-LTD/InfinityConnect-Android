@@ -39,6 +39,7 @@ fun SubscriptionInfoDto.toDomain(): SubscriptionInfo = SubscriptionInfo(
     isActive = isActive,
     keysCount = keysCount,
     latestExpiry = latestExpiry,
+    earliestExpiry = earliestExpiry,
     totalSpent = totalSpent,
     totalMonths = totalMonths,
 )
@@ -56,6 +57,7 @@ fun KeyDto.toDomain(): VpnKey = VpnKey(
     protocol = VpnProtocol.from(protocol),
     subscriptionUrl = subscriptionUrl,
     isPremium = isPremium,
+    serverStatus = status,
     deviceLimit = deviceLimit ?: hwidDeviceLimit,
     devicesUsed = devicesUsed ?: hwidDevicesUsed,
 )

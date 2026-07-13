@@ -44,6 +44,8 @@ data class SubscriptionInfo(
     val isActive: Boolean,
     val keysCount: Int,
     val latestExpiry: String?,
+    /** Ближайший срок окончания среди активных ключей (реальный «до когда»). */
+    val earliestExpiry: String?,
     val totalSpent: Double?,
     val totalMonths: Int?,
 )
@@ -64,8 +66,13 @@ data class VpnKey(
     /** Премиум-ключ (его сервер — премиум-хост): корона вместо глобуса в UI. */
     val isPremium: Boolean = false,
     /**
-     * Лимит и число подключённых устройств (Remnawave HWID-limit). Сервер пока
-     * их не отдаёт — поля опциональны; UI показывает лимит, только если пришли.
+     * Статус подписки от сервера (Remnawave): ACTIVE/EXPIRED/DISABLED/LIMITED.
+     * null — старый API без поля; тогда статус выводим на клиенте.
+     */
+    val serverStatus: String? = null,
+    /**
+     * Лимит и число подключённых устройств (Remnawave HWID-limit). Поля
+     * опциональны; UI показывает лимит, только если пришли.
      */
     val deviceLimit: Int? = null,
     val devicesUsed: Int? = null,
@@ -79,23 +86,35 @@ data class VpnKey(
         get() = (deviceLimit ?: 0) > 0 && (devicesUsed ?: 0) >= deviceLimit!!
 }
 
-/**
- * Производный статус подписки (Remnawave). Сервер не присылает его напрямую —
- * выводим на клиенте из is_active / expires_at / лимитов трафика и устройств.
- */
-enum class KeyStatus { ACTIVE, EXPIRED, DISABLED, LIMITED }
+/** Статус подписки Remnawave. */
+enum class KeyStatus {
+    ACTIVE, EXPIRED, DISABLED, LIMITED;
+
+    companion object {
+        /** Парсит статус из строки сервера; неизвестное/пустое → null. */
+        fun from(raw: String?): KeyStatus? = when (raw?.trim()?.uppercase()) {
+            "ACTIVE" -> ACTIVE
+            "EXPIRED" -> EXPIRED
+            "DISABLED" -> DISABLED
+            "LIMITED" -> LIMITED
+            else -> null
+        }
+    }
+}
 
 /**
- * Статус ключа для UI. Приоритет: истёкший срок → EXPIRED; неактивный →
- * DISABLED; исчерпан лимит (трафик/устройства) → LIMITED; иначе ACTIVE.
+ * Статус ключа для UI. Приоритет — статус от сервера (Remnawave); если его нет
+ * (старый API), выводим на клиенте: истёк → EXPIRED; неактивен → DISABLED;
+ * исчерпан лимит (трафик/устройства) → LIMITED; иначе ACTIVE.
  * [expired] — результат сравнения expires_at с текущим временем (считает UI).
  */
-fun VpnKey.status(expired: Boolean): KeyStatus = when {
-    expired -> KeyStatus.EXPIRED
-    !isActive -> KeyStatus.DISABLED
-    trafficExhausted || devicesExhausted -> KeyStatus.LIMITED
-    else -> KeyStatus.ACTIVE
-}
+fun VpnKey.status(expired: Boolean): KeyStatus =
+    KeyStatus.from(serverStatus) ?: when {
+        expired -> KeyStatus.EXPIRED
+        !isActive -> KeyStatus.DISABLED
+        trafficExhausted || devicesExhausted -> KeyStatus.LIMITED
+        else -> KeyStatus.ACTIVE
+    }
 
 /** Элемент списка серверов ключа (GET /v1/config/servers). */
 data class ServerEntry(

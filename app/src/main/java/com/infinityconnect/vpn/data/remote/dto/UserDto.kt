@@ -20,6 +20,8 @@ data class SubscriptionInfoDto(
     @SerialName("is_active") val isActive: Boolean = false,
     @SerialName("keys_count") val keysCount: Int = 0,
     @SerialName("latest_expiry") val latestExpiry: String? = null,
+    // Наименьшая дата окончания среди активных ключей — реальный «ближайший» срок.
+    @SerialName("earliest_expiry") val earliestExpiry: String? = null,
     @SerialName("total_spent") val totalSpent: Double? = null,
     @SerialName("total_months") val totalMonths: Int? = null,
 )

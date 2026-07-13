@@ -54,6 +54,8 @@ import com.infinityconnect.vpn.ui.components.StatusPill
 import com.infinityconnect.vpn.ui.theme.EyebrowStyle
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.theme.LocalInfinityGradients
+import com.infinityconnect.vpn.ui.util.daysUntil
+import com.infinityconnect.vpn.ui.util.formatDate
 import com.infinityconnect.vpn.ui.util.openInBrowser
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,11 +103,11 @@ fun ProfileScreen(
             ProfileHero(user = state.user)
 
             // --- Подписка ---
-            // Общий срок не показываем: API отдаёт лишь максимум по ключам,
-            // а у аккаунта несколько ключей с разными датами. Реальные сроки
-            // каждого ключа — на главном экране.
+            // Срок берём из earliest_expiry — ближайшая дата среди активных
+            // ключей (реальный «до когда»), а не максимум по всем ключам.
             SubscriptionCard(
                 active = state.user?.isSubscriptionActive == true,
+                expiresAt = state.subscription?.earliestExpiry,
                 keysCount = state.subscription?.keysCount,
                 totalMonths = state.subscription?.totalMonths,
                 totalSpent = state.subscription?.totalSpent,
@@ -212,6 +214,7 @@ private fun ProfileHero(user: UserInfo?) {
 @Composable
 private fun SubscriptionCard(
     active: Boolean,
+    expiresAt: String?,
     keysCount: Int?,
     totalMonths: Int?,
     totalSpent: Double?,
@@ -252,17 +255,22 @@ private fun SubscriptionCard(
             }
             Spacer(Modifier.height(12.dp))
 
+            val remaining = daysUntil(expiresAt)
             Text(
-                text = if (active) "Активна" else "Неактивна",
+                text = when {
+                    !active -> "Неактивна"
+                    remaining != null && remaining >= 0 ->
+                        "Осталось $remaining ${plural(remaining, "день", "дня", "дней")}"
+                    else -> "Активна"
+                },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = InfinityColors.OnSurface,
             )
-            keysCount?.takeIf { it > 0 }?.let { count ->
+            if (!expiresAt.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "$count ${plural(count, "активный ключ", "активных ключа", "активных ключей")}" +
-                        " · сроки на главном",
+                    text = "до ${formatDate(expiresAt)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = InfinityColors.Muted,
                 )

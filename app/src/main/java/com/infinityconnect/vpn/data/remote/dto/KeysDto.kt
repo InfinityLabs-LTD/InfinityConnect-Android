@@ -35,8 +35,13 @@ data class KeyDto(
      */
     @SerialName("is_premium") val isPremium: Boolean = false,
     /**
-     * Лимит устройств (HWID) Remnawave и число подключённых. Сервер пока их не
-     * отдаёт — принимаем под несколькими возможными именами, опционально.
+     * Статус подписки Remnawave: ACTIVE / EXPIRED / DISABLED / LIMITED.
+     * Опционально: старые версии API не отдают → клиент выводит статус сам.
+     */
+    @SerialName("status") val status: String? = null,
+    /**
+     * Лимит устройств (HWID) Remnawave и число подключённых. Принимаем под
+     * несколькими возможными именами, опционально.
      */
     @SerialName("device_limit") val deviceLimit: Int? = null,
     @SerialName("hwid_device_limit") val hwidDeviceLimit: Int? = null,
