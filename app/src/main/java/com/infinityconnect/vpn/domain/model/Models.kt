@@ -63,7 +63,39 @@ data class VpnKey(
     val subscriptionUrl: String?,
     /** Премиум-ключ (его сервер — премиум-хост): корона вместо глобуса в UI. */
     val isPremium: Boolean = false,
-)
+    /**
+     * Лимит и число подключённых устройств (Remnawave HWID-limit). Сервер пока
+     * их не отдаёт — поля опциональны; UI показывает лимит, только если пришли.
+     */
+    val deviceLimit: Int? = null,
+    val devicesUsed: Int? = null,
+) {
+    /** Достигнут лимит трафика (лимит задан и израсходован). */
+    val trafficExhausted: Boolean
+        get() = (trafficLimitBytes ?: 0) > 0 && (usedTrafficBytes ?: 0) >= trafficLimitBytes!!
+
+    /** Достигнут лимит устройств (данные есть и исчерпаны). */
+    val devicesExhausted: Boolean
+        get() = (deviceLimit ?: 0) > 0 && (devicesUsed ?: 0) >= deviceLimit!!
+}
+
+/**
+ * Производный статус подписки (Remnawave). Сервер не присылает его напрямую —
+ * выводим на клиенте из is_active / expires_at / лимитов трафика и устройств.
+ */
+enum class KeyStatus { ACTIVE, EXPIRED, DISABLED, LIMITED }
+
+/**
+ * Статус ключа для UI. Приоритет: истёкший срок → EXPIRED; неактивный →
+ * DISABLED; исчерпан лимит (трафик/устройства) → LIMITED; иначе ACTIVE.
+ * [expired] — результат сравнения expires_at с текущим временем (считает UI).
+ */
+fun VpnKey.status(expired: Boolean): KeyStatus = when {
+    expired -> KeyStatus.EXPIRED
+    !isActive -> KeyStatus.DISABLED
+    trafficExhausted || devicesExhausted -> KeyStatus.LIMITED
+    else -> KeyStatus.ACTIVE
+}
 
 /** Элемент списка серверов ключа (GET /v1/config/servers). */
 data class ServerEntry(

@@ -56,6 +56,8 @@ fun KeyDto.toDomain(): VpnKey = VpnKey(
     protocol = VpnProtocol.from(protocol),
     subscriptionUrl = subscriptionUrl,
     isPremium = isPremium,
+    deviceLimit = deviceLimit ?: hwidDeviceLimit,
+    devicesUsed = devicesUsed ?: hwidDevicesUsed,
 )
 
 /**

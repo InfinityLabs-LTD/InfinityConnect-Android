@@ -24,10 +24,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinityconnect.vpn.domain.model.KeyStatus
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.SubscriptionServer
 import com.infinityconnect.vpn.domain.model.VpnKey
 import com.infinityconnect.vpn.domain.model.VpnProtocol
+import com.infinityconnect.vpn.domain.model.status
 import com.infinityconnect.vpn.ui.components.EmojiBadge
 import com.infinityconnect.vpn.ui.components.GlassCard
 import com.infinityconnect.vpn.ui.components.StatusPill
@@ -35,6 +37,7 @@ import com.infinityconnect.vpn.ui.settings.pingColor
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.util.formatBytes
 import com.infinityconnect.vpn.ui.util.formatDate
+import com.infinityconnect.vpn.ui.util.isExpired
 
 /** Карточка ключа (подписки) в списке. */
 @Composable
@@ -58,6 +61,7 @@ fun KeyCard(
             // Значок: корона у премиум-ключа (его сервер — премиум-хост),
             // иначе глобус (обычная подписка / «все сервера»).
             EmojiBadge(emoji = if (key.isPremium) "👑" else "🌐", size = 46.dp)
+            val status = key.status(expired = isExpired(key.expiresAt))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -70,23 +74,30 @@ fun KeyCard(
                     )
                     ProtocolChip(key.protocol)
                 }
-                key.expiresAt?.let {
-                    Text(
-                        text = "Активна до ${formatDate(it)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = InfinityColors.Muted,
-                    )
-                }
+                // Строка статуса: для активной — срок, для проблемной — причина.
+                Text(
+                    text = keyStatusLine(status, key.expiresAt),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = statusTextColor(status),
+                )
                 if (key.trafficLimitBytes != null && key.trafficLimitBytes > 0) {
                     val used = key.usedTrafficBytes ?: 0
                     Text(
                         text = "${formatBytes(used)} / ${formatBytes(key.trafficLimitBytes)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = InfinityColors.MutedDim,
+                        color = if (key.trafficExhausted) InfinityColors.Coral else InfinityColors.MutedDim,
+                    )
+                }
+                // Лимит устройств — показываем только если сервер прислал данные.
+                if (key.deviceLimit != null && key.deviceLimit > 0) {
+                    Text(
+                        text = "Устройств: ${key.devicesUsed ?: 0} / ${key.deviceLimit}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (key.devicesExhausted) InfinityColors.Coral else InfinityColors.MutedDim,
                     )
                 }
             }
-            StatusDot(active = key.isActive)
+            KeyStatusDot(status)
         }
     }
 }
@@ -108,12 +119,10 @@ private fun ProtocolChip(protocol: VpnProtocol) {
     )
 }
 
+/** Индикатор-точка статуса ключа: зелёный активна, серый/жёлтый/красный иначе. */
 @Composable
-private fun StatusDot(active: Boolean) {
-    val color by animateColorAsState(
-        if (active) InfinityColors.Mint else InfinityColors.MutedDim,
-        label = "dot",
-    )
+private fun KeyStatusDot(status: KeyStatus) {
+    val color by animateColorAsState(statusDotColor(status), label = "dot")
     Box(
         modifier = Modifier
             .size(10.dp)
@@ -121,6 +130,28 @@ private fun StatusDot(active: Boolean) {
             .background(color)
             .border(3.dp, color.copy(alpha = 0.18f), RoundedCornerShape(50)),
     )
+}
+
+private fun statusDotColor(status: KeyStatus): Color = when (status) {
+    KeyStatus.ACTIVE -> InfinityColors.Mint
+    KeyStatus.LIMITED -> InfinityColors.Amber
+    KeyStatus.EXPIRED -> InfinityColors.Coral
+    KeyStatus.DISABLED -> InfinityColors.MutedDim
+}
+
+private fun statusTextColor(status: KeyStatus): Color = when (status) {
+    KeyStatus.ACTIVE -> InfinityColors.Muted
+    KeyStatus.LIMITED -> InfinityColors.Amber
+    KeyStatus.EXPIRED -> InfinityColors.Coral
+    KeyStatus.DISABLED -> InfinityColors.MutedDim
+}
+
+/** Строка статуса под названием ключа. */
+private fun keyStatusLine(status: KeyStatus, expiresAt: String?): String = when (status) {
+    KeyStatus.ACTIVE -> if (expiresAt.isNullOrBlank()) "Активна" else "Активна до ${formatDate(expiresAt)}"
+    KeyStatus.EXPIRED -> if (expiresAt.isNullOrBlank()) "Срок истёк" else "Истекла ${formatDate(expiresAt)}"
+    KeyStatus.DISABLED -> "Отключена"
+    KeyStatus.LIMITED -> "Достигнут лимит"
 }
 
 /**

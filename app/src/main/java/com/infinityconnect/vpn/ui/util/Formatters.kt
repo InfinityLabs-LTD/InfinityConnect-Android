@@ -54,3 +54,34 @@ fun formatDate(iso: String?): String {
 /** Форматирует epoch-миллисекунды в «ДД.ММ.ГГГГ ЧЧ:ММ». */
 fun formatDateTime(epochMs: Long): String =
     SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(epochMs))
+
+/**
+ * Парсит ISO-дату (день YYYY-MM-DD, разделитель даты/времени — пробел или T)
+ * в epoch-мс начала дня. null — если формат неразборчив.
+ */
+fun parseIsoDateMs(iso: String?): Long? {
+    if (iso.isNullOrBlank()) return null
+    val parts = iso.take(10).split("-")
+    if (parts.size != 3) return null
+    return try {
+        val cal = java.util.Calendar.getInstance()
+        cal.clear()
+        cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+        cal.timeInMillis
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/** Срок в прошлом (истёк). Неразборчивую/пустую дату считаем не истёкшей. */
+fun isExpired(iso: String?): Boolean {
+    val ms = parseIsoDateMs(iso) ?: return false
+    // Прибавляем сутки: дата без времени — истекает в конце дня.
+    return ms + 86_400_000L < System.currentTimeMillis()
+}
+
+/** Число полных дней до даты (может быть отрицательным). null — не разобрана. */
+fun daysUntil(iso: String?): Int? {
+    val ms = parseIsoDateMs(iso) ?: return null
+    return ((ms - System.currentTimeMillis()) / 86_400_000L).toInt()
+}

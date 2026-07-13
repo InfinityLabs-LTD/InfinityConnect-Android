@@ -34,4 +34,12 @@ data class KeyDto(
      * is_premium=1). Опционально: старые версии API не отдают → false.
      */
     @SerialName("is_premium") val isPremium: Boolean = false,
+    /**
+     * Лимит устройств (HWID) Remnawave и число подключённых. Сервер пока их не
+     * отдаёт — принимаем под несколькими возможными именами, опционально.
+     */
+    @SerialName("device_limit") val deviceLimit: Int? = null,
+    @SerialName("hwid_device_limit") val hwidDeviceLimit: Int? = null,
+    @SerialName("devices_used") val devicesUsed: Int? = null,
+    @SerialName("hwid_devices_used") val hwidDevicesUsed: Int? = null,
 )
