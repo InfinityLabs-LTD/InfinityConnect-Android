@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -55,7 +54,6 @@ import com.infinityconnect.vpn.ui.components.StatusPill
 import com.infinityconnect.vpn.ui.theme.EyebrowStyle
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.theme.LocalInfinityGradients
-import com.infinityconnect.vpn.ui.util.formatDate
 import com.infinityconnect.vpn.ui.util.openInBrowser
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,10 +100,12 @@ fun ProfileScreen(
             // --- Hero-шапка: аватар-инициалы, логин, бейдж статуса подписки ---
             ProfileHero(user = state.user)
 
-            // --- Подписка (с прогрессом до окончания) ---
+            // --- Подписка ---
+            // Общий срок не показываем: API отдаёт лишь максимум по ключам,
+            // а у аккаунта несколько ключей с разными датами. Реальные сроки
+            // каждого ключа — на главном экране.
             SubscriptionCard(
                 active = state.user?.isSubscriptionActive == true,
-                expiresAt = state.user?.subscriptionExpiresAt,
                 keysCount = state.subscription?.keysCount,
                 totalMonths = state.subscription?.totalMonths,
                 totalSpent = state.subscription?.totalSpent,
@@ -212,7 +212,6 @@ private fun ProfileHero(user: UserInfo?) {
 @Composable
 private fun SubscriptionCard(
     active: Boolean,
-    expiresAt: String?,
     keysCount: Int?,
     totalMonths: Int?,
     totalSpent: Double?,
@@ -253,43 +252,19 @@ private fun SubscriptionCard(
             }
             Spacer(Modifier.height(12.dp))
 
-            val remaining = daysRemaining(expiresAt)
-            val isLifetime = isLifetime(expiresAt)
             Text(
-                text = when {
-                    isLifetime -> "Бессрочно"
-                    remaining == null -> if (active) "Активна" else "Неактивна"
-                    remaining <= 0 -> "Истекла"
-                    else -> "Осталось $remaining ${plural(remaining, "день", "дня", "дней")}"
-                },
+                text = if (active) "Активна" else "Неактивна",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = InfinityColors.OnSurface,
             )
-            if (!isLifetime && !expiresAt.isNullOrBlank()) {
+            keysCount?.takeIf { it > 0 }?.let { count ->
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "до ${formatDate(expiresAt)}",
+                    text = "$count ${plural(count, "активный ключ", "активных ключа", "активных ключей")}" +
+                        " · сроки на главном",
                     style = MaterialTheme.typography.bodyMedium,
                     color = InfinityColors.Muted,
-                )
-            }
-
-            // Прогресс-бар — только когда осталось конечное число дней.
-            if (!isLifetime && remaining != null && remaining > 0) {
-                Spacer(Modifier.height(12.dp))
-                // Шкала: последние 30 дней (условное «окно продления»).
-                val progress = (remaining.coerceAtMost(30) / 30f)
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(50)),
-                    color = accent,
-                    trackColor = InfinityColors.SpaceElevated,
-                    gapSize = 0.dp,
-                    drawStopIndicator = {},
                 )
             }
 
@@ -394,33 +369,6 @@ private fun looksLikeEmail(s: String): Boolean {
     val t = s.trim()
     val at = t.indexOf('@')
     return at > 0 && t.indexOf('.', at) > at + 1
-}
-
-/** Число полных дней до даты окончания (null — если дата не разобрана). */
-private fun daysRemaining(iso: String?): Int? {
-    val ms = parseIsoDateMs(iso) ?: return null
-    val diff = ms - System.currentTimeMillis()
-    return (diff / 86_400_000L).toInt()
-}
-
-/** Считаем «бессрочной» подписку с окончанием после 2090 года. */
-private fun isLifetime(iso: String?): Boolean {
-    val year = iso?.take(4)?.toIntOrNull() ?: return false
-    return year >= 2090
-}
-
-private fun parseIsoDateMs(iso: String?): Long? {
-    if (iso.isNullOrBlank()) return null
-    val parts = iso.take(10).split("-")
-    if (parts.size != 3) return null
-    return try {
-        val cal = java.util.Calendar.getInstance()
-        cal.clear()
-        cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
-        cal.timeInMillis
-    } catch (_: Exception) {
-        null
-    }
 }
 
 private fun plural(n: Int, one: String, few: String, many: String): String {
