@@ -73,7 +73,7 @@ HomeScreen (кнопка Connect)
 | `SplashViewModel.kt` | Стартовый роутинг: discovery → AUTH/HOME/ERROR. | DiscoveryRepository, AuthRepository |
 | `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/SETTINGS). | все экраны |
 | `navigation/Routes.kt` | Константы маршрутов. | — |
-| `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), список подписок сгруппирован через `KeyGroup` (ключ + его серверы в едином контейнере). | HomeViewModel |
+| `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). | HomeViewModel |
 | `home/HomeViewModel.kt` | **Ядро UI-логики:** список ключей, выбор сервера, пинг-all, connect/switch/disconnect. | ObserveKeys/SyncKeys/GetServers/PingServer usecase, VpnController, VpnStateHolder, SettingsStore |
 | `home/ConnectHero.kt`, `home/HomeComponents.kt` | Составные Compose-компоненты главного экрана. | — |
 | `auth/AuthScreen.kt` + `AuthViewModel.kt` | Экран входа по логину/паролю. | AuthUseCases |
