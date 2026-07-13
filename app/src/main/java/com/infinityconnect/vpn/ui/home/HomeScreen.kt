@@ -250,7 +250,7 @@ private fun KeyGroup(
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
             )
             .padding(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Подсветку выделения несёт контейнер группы, поэтому саму карточку-ключ
         // не подсвечиваем — иначе двойная рамка.
