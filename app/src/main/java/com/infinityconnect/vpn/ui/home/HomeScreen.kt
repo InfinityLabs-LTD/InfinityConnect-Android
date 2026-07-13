@@ -3,6 +3,7 @@ package com.infinityconnect.vpn.ui.home
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -164,6 +166,12 @@ private fun HomeContent(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // В состоянии «не подключено» hero компактнее — список серверов сразу виден.
+    val compactHero = tunnel is TunnelState.Disconnected || tunnel is TunnelState.Error
+    // Выбранный сервер — для подписи под кнопкой.
+    val selectedServer = ui.serversByKey[ui.selectedKeyId]
+        ?.firstOrNull { it.index == ui.selectedServerIndex }
+
     PullToRefreshBox(
         isRefreshing = ui.refreshing,
         onRefresh = onRefresh,
@@ -178,6 +186,9 @@ private fun HomeContent(
                     tunnel = tunnel,
                     stats = stats,
                     canConnect = ui.selectedKeyId != null,
+                    compact = compactHero,
+                    selectedServer = selectedServer,
+                    pingMethod = ui.pingMethod,
                     onToggle = onToggle,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -188,33 +199,77 @@ private fun HomeContent(
                 )
                 Spacer(Modifier.height(4.dp))
             }
-            // Под каждым ключом список его серверов раскрыт всегда (у всех сразу).
+            // Каждая подписка — единый блок: карточка-ключ + её серверы под ней
+            // в общем контейнере, чтобы группировка «ключ → серверы» читалась.
             ui.keys.forEachIndexed { index, key ->
-                item(key = "key-${key.id}") {
-                    KeyCard(
+                item(key = "group-${key.id}") {
+                    val servers = ui.serversByKey[key.id].orEmpty()
+                    KeyGroup(
                         key = key,
                         number = index + 1,
-                        selected = key.id == ui.selectedKeyId,
-                        onClick = { },
-                    )
-                }
-                val servers = ui.serversByKey[key.id].orEmpty()
-                if (servers.isEmpty() && key.id in ui.loadingKeys) {
-                    item(key = "srv-loading-${key.id}") {
-                        ServersLoadingRow()
-                    }
-                }
-                items(servers, key = { "srv-${key.id}-${it.index}" }) { server ->
-                    ServerRow(
-                        server = server,
-                        selected = key.id == ui.selectedKeyId &&
-                            server.index == ui.selectedServerIndex,
+                        servers = servers,
+                        loading = servers.isEmpty() && key.id in ui.loadingKeys,
+                        selectedKeyId = ui.selectedKeyId,
+                        selectedServerIndex = ui.selectedServerIndex,
                         pingMethod = ui.pingMethod,
-                        onClick = { onSelectServer(key.id, server) },
+                        onSelectServer = onSelectServer,
                     )
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
+        }
+    }
+}
+
+/**
+ * Группа одной подписки: карточка-ключ и раскрытый под ней список её серверов,
+ * объединённые общим контейнером с приподнятым фоном и вертикальным
+ * коннектором — чтобы граница между подписками читалась.
+ */
+@Composable
+private fun KeyGroup(
+    key: com.infinityconnect.vpn.domain.model.VpnKey,
+    number: Int,
+    servers: List<com.infinityconnect.vpn.domain.model.SubscriptionServer>,
+    loading: Boolean,
+    selectedKeyId: Long?,
+    selectedServerIndex: Int,
+    pingMethod: com.infinityconnect.vpn.domain.model.PingMethod,
+    onSelectServer: (Long, com.infinityconnect.vpn.domain.model.SubscriptionServer) -> Unit,
+) {
+    val isSelectedKey = key.id == selectedKeyId
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+            .background(InfinityColors.SpaceElevated)
+            .border(
+                width = 1.dp,
+                color = if (isSelectedKey) InfinityColors.AccentBlue.copy(alpha = 0.4f)
+                else InfinityColors.Stroke,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            )
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        // Подсветку выделения несёт контейнер группы, поэтому саму карточку-ключ
+        // не подсвечиваем — иначе двойная рамка.
+        KeyCard(
+            key = key,
+            number = number,
+            selected = false,
+            onClick = { },
+        )
+        if (loading) {
+            ServersLoadingRow()
+        }
+        servers.forEach { server ->
+            ServerRow(
+                server = server,
+                selected = isSelectedKey && server.index == selectedServerIndex,
+                pingMethod = pingMethod,
+                onClick = { onSelectServer(key.id, server) },
+            )
         }
     }
 }
@@ -225,29 +280,67 @@ private fun ConnectionHeader(
     tunnel: TunnelState,
     stats: com.infinityconnect.vpn.vpn.TunnelStats,
     canConnect: Boolean,
+    compact: Boolean,
+    selectedServer: com.infinityconnect.vpn.domain.model.SubscriptionServer?,
+    pingMethod: com.infinityconnect.vpn.domain.model.PingMethod,
     onToggle: () -> Unit,
 ) {
     val isActive = tunnel is TunnelState.Connected || tunnel is TunnelState.Connecting
+    val gap = if (compact) 14.dp else 20.dp
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         StatusPill(text = statusTitle(tunnel), color = statusColor(tunnel))
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(gap))
         ConnectHero(
             tunnel = tunnel,
             enabled = canConnect || isActive,
             onToggle = onToggle,
+            compact = compact,
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(gap))
         if (tunnel is TunnelState.Connected) {
             StatsRow(stats)
+        } else if (canConnect) {
+            // Показываем целевой сервер, чтобы было понятно, куда подключимся.
+            SelectedServerHint(server = selectedServer, pingMethod = pingMethod)
         } else {
             Text(
-                text = if (canConnect) "Нажмите, чтобы подключиться" else "Выберите сервер",
+                text = "Выберите сервер",
                 style = MaterialTheme.typography.bodyMedium,
                 color = InfinityColors.Muted,
             )
+        }
+    }
+}
+
+/** Подпись под кнопкой: выбранный сервер (флаг, имя) и его пинг. */
+@Composable
+private fun SelectedServerHint(
+    server: com.infinityconnect.vpn.domain.model.SubscriptionServer?,
+    pingMethod: com.infinityconnect.vpn.domain.model.PingMethod,
+) {
+    if (server == null) {
+        Text(
+            text = "Нажмите, чтобы подключиться",
+            style = MaterialTheme.typography.bodyMedium,
+            color = InfinityColors.Muted,
+        )
+        return
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "${server.flag ?: "🌐"}  ${server.name}",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = InfinityColors.OnSurface,
+        )
+        server.pingMs?.takeIf { it >= 0 }?.let {
+            StatusPill(text = "$it мс", color = com.infinityconnect.vpn.ui.settings.pingColor(pingMethod, it))
         }
     }
 }

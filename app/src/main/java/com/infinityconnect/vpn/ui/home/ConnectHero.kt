@@ -41,9 +41,16 @@ fun ConnectHero(
     enabled: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Компактный размер (когда не подключён — освобождает место списку). */
+    compact: Boolean = false,
 ) {
     val connected = tunnel is TunnelState.Connected
     val connecting = tunnel is TunnelState.Connecting || tunnel is TunnelState.Disconnecting
+
+    // Внешний ореол/кнопка сжимаются в компактном режиме.
+    val heroSize = if (compact) 176.dp else 248.dp
+    val discSize = if (compact) 112.dp else 150.dp
+    val iconSize = if (compact) 40.dp else 52.dp
 
     val accent by animateColorAsState(
         targetValue = when {
@@ -80,10 +87,10 @@ fun ConnectHero(
     val interaction = remember { MutableInteractionSource() }
 
     Box(
-        modifier = modifier.size(248.dp),
+        modifier = modifier.size(heroSize),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(modifier = Modifier.size(248.dp)) {
+        Canvas(modifier = Modifier.size(heroSize)) {
             val c = Offset(size.width / 2, size.height / 2)
             val glowScale = if (connecting || connected) pulse else 1f
 
@@ -130,7 +137,7 @@ fun ConnectHero(
         // Внутренний диск-кнопка.
         Box(
             modifier = Modifier
-                .size(150.dp)
+                .size(discSize)
                 .clickable(
                     interactionSource = interaction,
                     indication = null,
@@ -140,7 +147,7 @@ fun ConnectHero(
                 .then(Modifier),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(modifier = Modifier.size(150.dp)) {
+            Canvas(modifier = Modifier.size(discSize)) {
                 val c = Offset(size.width / 2, size.height / 2)
                 drawCircle(
                     brush = Brush.linearGradient(
@@ -168,7 +175,7 @@ fun ConnectHero(
                 imageVector = Icons.Filled.PowerSettingsNew,
                 contentDescription = if (connected) "Отключить" else "Подключить",
                 tint = Color.White,
-                modifier = Modifier.size(52.dp),
+                modifier = Modifier.size(iconSize),
             )
         }
     }
