@@ -18,23 +18,23 @@ import androidx.compose.ui.unit.sp
  * Нейтрали смещены в синеву — не серый по умолчанию, а выбранный оттенок.
  */
 object InfinityColors {
-    val Space = Color(0xFF070B18)        // самый тёмный фон
-    val SpaceElevated = Color(0xFF0D1324) // приподнятый фон (за картами)
-    val Surface = Color(0xFF121A2E)       // карточка
-    val SurfaceHi = Color(0xFF1A2440)     // карточка (выделенная/ховер)
-    val Stroke = Color(0xFF243154)        // тонкая обводка карточек
+    val Space = Color(0xFF0B0716)        // самый тёмный фон (фиолетово-чёрный)
+    val SpaceElevated = Color(0xFF150E28) // приподнятый фон (за картами)
+    val Surface = Color(0xFF1C1338)       // карточка
+    val SurfaceHi = Color(0xFF261A4C)     // карточка (выделенная/ховер)
+    val Stroke = Color(0xFF352455)        // тонкая обводка карточек
 
-    val AccentBlue = Color(0xFF3D8BFF)
-    val AccentIndigo = Color(0xFF6C5CFF)
-    val AccentCyan = Color(0xFF4FD8FF)
+    val AccentBlue = Color(0xFF9D5CFF)    // основной акцент (фиолетовый)
+    val AccentIndigo = Color(0xFF6C3CFF)  // глубокий индиго-фиолет
+    val AccentCyan = Color(0xFFC77DFF)    // светлый пурпурно-розовый
 
     val Mint = Color(0xFF22E1A1)          // подключено
     val Coral = Color(0xFFFF5A6E)         // ошибка / отключить
     val Amber = Color(0xFFFFB020)         // средний пинг
 
-    val OnSurface = Color(0xFFE9EDF7)     // основной текст
-    val Muted = Color(0xFF8B95B2)         // вторичный текст
-    val MutedDim = Color(0xFF5C6683)      // самый приглушённый
+    val OnSurface = Color(0xFFEDE9F7)     // основной текст
+    val Muted = Color(0xFF9A8FB6)         // вторичный текст
+    val MutedDim = Color(0xFF685C83)      // самый приглушённый
 
     // Базовые цвета пинг-пилла по методу измерения (окрашивают шкалу качества).
     val PingReal = Mint          // «реальный» пинг через ядро — флагманский
@@ -64,7 +64,7 @@ private val gradients = InfinityGradients(
         listOf(InfinityColors.Mint, InfinityColors.AccentCyan),
     ),
     screen = Brush.verticalGradient(
-        listOf(Color(0xFF0A1022), InfinityColors.Space),
+        listOf(Color(0xFF160D2B), InfinityColors.Space),
     ),
     cardStroke = Brush.linearGradient(
         listOf(Color(0x33FFFFFF), Color(0x08FFFFFF)),
