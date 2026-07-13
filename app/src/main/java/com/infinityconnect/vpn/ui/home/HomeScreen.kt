@@ -249,7 +249,7 @@ private fun KeyGroup(
                 else InfinityColors.Stroke,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
             )
-            .padding(6.dp),
+            .padding(start = 6.dp, top = 6.dp, end = 6.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Подсветку выделения несёт контейнер группы, поэтому саму карточку-ключ

@@ -154,7 +154,6 @@ fun ServerRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 14.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(if (selected) InfinityColors.SurfaceHi else InfinityColors.Surface)
             .border(
