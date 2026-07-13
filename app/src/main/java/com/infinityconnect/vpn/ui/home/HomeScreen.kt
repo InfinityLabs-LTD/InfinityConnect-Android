@@ -133,7 +133,6 @@ fun HomeScreen(
                 stats = stats,
                 onRefresh = { viewModel.refresh() },
                 onPingAll = { viewModel.pingAllSelected() },
-                onSelectKey = viewModel::selectKey,
                 onSelectServer = viewModel::selectServer,
                 onToggle = {
                     if (viewModel.isConnectingOrConnected()) {
@@ -161,8 +160,7 @@ private fun HomeContent(
     stats: com.infinityconnect.vpn.vpn.TunnelStats,
     onRefresh: () -> Unit,
     onPingAll: () -> Unit,
-    onSelectKey: (Long) -> Unit,
-    onSelectServer: (com.infinityconnect.vpn.domain.model.SubscriptionServer) -> Unit,
+    onSelectServer: (Long, com.infinityconnect.vpn.domain.model.SubscriptionServer) -> Unit,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -183,45 +181,37 @@ private fun HomeContent(
                     onToggle = onToggle,
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "МОИ ПОДПИСКИ",
-                    style = EyebrowStyle,
-                    color = InfinityColors.Muted,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                // Кнопка пинга — в самом верху, пингует все серверы всех подписок.
+                PingAllBar(
+                    pinging = ui.pinging,
+                    onPingAll = onPingAll,
                 )
+                Spacer(Modifier.height(4.dp))
             }
-            // Под каждым ключом раскрываем список его серверов, если ключ выбран.
+            // Под каждым ключом список его серверов раскрыт всегда (у всех сразу).
             ui.keys.forEachIndexed { index, key ->
                 item(key = "key-${key.id}") {
                     KeyCard(
                         key = key,
                         number = index + 1,
                         selected = key.id == ui.selectedKeyId,
-                        onClick = { onSelectKey(key.id) },
+                        onClick = { },
                     )
                 }
-                if (key.id == ui.selectedKeyId) {
-                    if (ui.serversLoading && ui.servers.isEmpty()) {
-                        item(key = "srv-loading-${key.id}") {
-                            ServersLoadingRow()
-                        }
+                val servers = ui.serversByKey[key.id].orEmpty()
+                if (servers.isEmpty() && key.id in ui.loadingKeys) {
+                    item(key = "srv-loading-${key.id}") {
+                        ServersLoadingRow()
                     }
-                    if (ui.servers.isNotEmpty()) {
-                        item(key = "srv-header-${key.id}") {
-                            ServersHeader(
-                                pinging = ui.pinging,
-                                onPingAll = onPingAll,
-                            )
-                        }
-                    }
-                    items(ui.servers, key = { "srv-${key.id}-${it.index}" }) { server ->
-                        ServerRow(
-                            server = server,
-                            selected = server.index == ui.selectedServerIndex,
-                            pingMethod = ui.pingMethod,
-                            onClick = { onSelectServer(server) },
-                        )
-                    }
+                }
+                items(servers, key = { "srv-${key.id}-${it.index}" }) { server ->
+                    ServerRow(
+                        server = server,
+                        selected = key.id == ui.selectedKeyId &&
+                            server.index == ui.selectedServerIndex,
+                        pingMethod = ui.pingMethod,
+                        onClick = { onSelectServer(key.id, server) },
+                    )
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
@@ -332,16 +322,19 @@ private fun OverflowMenu(
     }
 }
 
-/** Заголовок списка серверов с кнопкой «Пинг всех». */
+/**
+ * Верхняя панель со списком «МОИ ПОДПИСКИ» и кнопкой «Пинг всех» — пингует
+ * серверы всех подписок сразу.
+ */
 @Composable
-private fun ServersHeader(pinging: Boolean, onPingAll: () -> Unit) {
+private fun PingAllBar(pinging: Boolean, onPingAll: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "СЕРВЕРЫ",
+            text = "МОИ ПОДПИСКИ",
             style = EyebrowStyle,
             color = InfinityColors.Muted,
             modifier = Modifier.padding(start = 4.dp),

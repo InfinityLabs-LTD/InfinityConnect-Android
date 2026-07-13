@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -27,18 +29,24 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 /** UI-состояние главного экрана. */
 data class HomeUiState(
     val keys: List<VpnKey> = emptyList(),
+    /** Выбранный для подключения ключ. */
     val selectedKeyId: Long? = null,
     val selectedServerIndex: Int = 0,
     val selectedServerName: String? = null,
-    /** Серверы выбранного ключа (стиль Happ) — с метаданными и пингом. */
-    val servers: List<SubscriptionServer> = emptyList(),
-    val serversLoading: Boolean = false,
-    /** Идёт измерение пинга серверов (кнопка «Пинг всех»). */
+    /**
+     * Серверы КАЖДОГО ключа (стиль Happ) — списки развёрнуты сразу у всех
+     * подписок. Ключ карты — id подписки, значение — её серверы с пингом.
+     */
+    val serversByKey: Map<Long, List<SubscriptionServer>> = emptyMap(),
+    /** Ключи, для которых список серверов ещё грузится (первый заход). */
+    val loadingKeys: Set<Long> = emptySet(),
+    /** Идёт измерение пинга серверов (кнопка «Пинг всех» — по всем подпискам). */
     val pinging: Boolean = false,
     /** Активный метод пинга — от него зависит цвет пинг-пилла. */
     val pingMethod: com.infinityconnect.vpn.domain.model.PingMethod =
@@ -57,14 +65,14 @@ class HomeViewModel @Inject constructor(
     private val vpnController: VpnController,
     private val settingsStore: com.infinityconnect.vpn.data.local.SettingsStore,
     private val logoutUseCase: com.infinityconnect.vpn.domain.usecase.LogoutUseCase,
-    stateHolder: VpnStateHolder,
+    private val stateHolder: VpnStateHolder,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(HomeUiState())
     val ui: StateFlow<HomeUiState> = _ui.asStateFlow()
 
-    private var serversJob: Job? = null
     private var pingJob: Job? = null
+    private var switchJob: Job? = null
 
     /** Состояние туннеля и статистика — напрямую из holder'а. */
     val tunnelState: StateFlow<TunnelState> = stateHolder.state
@@ -72,21 +80,14 @@ class HomeViewModel @Inject constructor(
     val stats: StateFlow<TunnelStats> = stateHolder.stats
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TunnelStats())
 
-    // Кэш серверов по ключу на уровне ViewModel — при повторном выборе ключа
-    // список показывается мгновенно, без спиннера и без сети.
-    private val serversByKey = mutableMapOf<Long, List<SubscriptionServer>>()
-
     init {
         // Подписка на кэш ключей: обновляем список и авто-выбираем ключ.
         observeKeys()
             .onEach { keys ->
-                val prevSelected = _ui.value.selectedKeyId
-                val selected = prevSelected
+                val selected = _ui.value.selectedKeyId
                     ?: keys.firstOrNull { it.isActive }?.id
                     ?: keys.firstOrNull()?.id
                 _ui.update { it.copy(keys = keys, selectedKeyId = selected) }
-                // Показать серверы авто-выбранного ключа (из кэша, если есть).
-                if (prevSelected == null && selected != null) showServers(selected)
             }
             .launchIn(viewModelScope)
 
@@ -97,15 +98,12 @@ class HomeViewModel @Inject constructor(
                 _ui.update { it.copy(pingMethod = ps.method) }
                 if (changed) {
                     // Сбрасываем кэш пингов и меряем заново текущим методом.
-                    serversByKey.keys.toList().forEach { keyId ->
-                        serversByKey[keyId] = serversByKey[keyId].orEmpty().map { it.copy(pingMs = null) }
+                    _ui.update { st ->
+                        st.copy(serversByKey = st.serversByKey.mapValues { (_, list) ->
+                            list.map { it.copy(pingMs = null) }
+                        })
                     }
-                    val cur = _ui.value.selectedKeyId
-                    val servers = _ui.value.servers
-                    if (cur != null && servers.isNotEmpty()) {
-                        _ui.update { it.copy(servers = servers.map { s -> s.copy(pingMs = null) }) }
-                        pingAll(cur, servers)
-                    }
+                    pingAllKeys()
                 }
             }
             .launchIn(viewModelScope)
@@ -119,9 +117,8 @@ class HomeViewModel @Inject constructor(
             when (val result = syncKeys()) {
                 is AppResult.Success -> {
                     _ui.update { it.copy(refreshing = false, loadingFirstTime = false) }
-                    // Предзагружаем серверы всех ключей (форсируем обновление кэша
-                    // подписок — это и есть действие кнопки ⟳ / pull-to-refresh).
-                    preloadAllServers(result.data.map { it.id }, force = !initial)
+                    // Загружаем серверы всех ключей — списки развёрнуты у всех сразу.
+                    loadAllServers(result.data.map { it.id }, force = !initial)
                 }
                 is AppResult.Failure ->
                     _ui.update {
@@ -135,6 +132,32 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** Загружает серверы всех ключей и запускает пинг по всем подпискам сразу. */
+    private fun loadAllServers(keyIds: List<Long>, force: Boolean) {
+        viewModelScope.launch {
+            // Спиннер только у ключей, для которых серверов ещё нет.
+            _ui.update { st ->
+                val missing = keyIds.filter { st.serversByKey[it].isNullOrEmpty() }.toSet()
+                st.copy(loadingKeys = st.loadingKeys + missing)
+            }
+            keyIds.forEach { keyId ->
+                when (val result = getServers(keyId, forceRefresh = force)) {
+                    is AppResult.Success ->
+                        _ui.update { st ->
+                            st.copy(
+                                serversByKey = st.serversByKey + (keyId to result.data),
+                                loadingKeys = st.loadingKeys - keyId,
+                            )
+                        }
+                    is AppResult.Failure ->
+                        _ui.update { it.copy(loadingKeys = it.loadingKeys - keyId) }
+                }
+            }
+            pingAllKeys()
+        }
+    }
+
+    /** Выбор ключа (подписки) — как цель для подключения. */
     fun selectKey(keyId: Long) {
         if (_ui.value.selectedKeyId == keyId) return
         _ui.update {
@@ -142,105 +165,89 @@ class HomeViewModel @Inject constructor(
                 selectedKeyId = keyId,
                 selectedServerIndex = 0,
                 selectedServerName = null,
-                servers = serversByKey[keyId].orEmpty(),
             )
         }
-        showServers(keyId)
     }
 
-    /**
-     * Показывает серверы ключа: мгновенно из кэша, а сеть трогает только если
-     * кэша ещё нет (первый заход). Спиннер — лишь когда реально нечего показать.
-     */
-    private fun showServers(keyId: Long) {
-        serversJob?.cancel()
-        val cached = serversByKey[keyId]
-        if (cached != null) {
-            _ui.update { it.copy(servers = cached, serversLoading = false) }
-            // Пинги могли не сохраниться — домеряем, если их нет.
-            if (cached.any { it.pingMs == null }) pingAll(keyId, cached)
+    /** Кнопка «Пинг всех» (вверху экрана): перемеряет пинг по ВСЕМ подпискам. */
+    fun pingAllSelected() {
+        if (_ui.value.pinging) return
+        _ui.update { st ->
+            st.copy(serversByKey = st.serversByKey.mapValues { (_, list) ->
+                list.map { it.copy(pingMs = null) }
+            })
+        }
+        pingAllKeys()
+    }
+
+    /** Пингует серверы всех ключей и обновляет их по мере готовности. */
+    private fun pingAllKeys() {
+        pingJob?.cancel()
+        // Плоский список (keyId, server) по всем подпискам.
+        val targets = _ui.value.serversByKey.flatMap { (keyId, list) ->
+            list.map { keyId to it }
+        }
+        if (targets.isEmpty()) {
+            _ui.update { it.copy(pinging = false) }
             return
         }
-        _ui.update { it.copy(serversLoading = true) }
-        serversJob = viewModelScope.launch {
-            when (val result = getServers(keyId)) {
-                is AppResult.Success -> {
-                    serversByKey[keyId] = result.data
-                    if (_ui.value.selectedKeyId == keyId) {
-                        _ui.update { it.copy(servers = result.data, serversLoading = false) }
-                    }
-                    pingAll(keyId, result.data)
-                }
-                is AppResult.Failure ->
-                    _ui.update { it.copy(serversLoading = false) }
-            }
-        }
-    }
-
-    /** Предзагружает (и обновляет) серверы всех ключей в фоне. */
-    private fun preloadAllServers(keyIds: List<Long>, force: Boolean) {
-        viewModelScope.launch {
-            keyIds.forEach { keyId ->
-                when (val result = getServers(keyId, forceRefresh = force)) {
-                    is AppResult.Success -> {
-                        serversByKey[keyId] = result.data
-                        // Обновляем видимый список, если это текущий ключ.
-                        if (_ui.value.selectedKeyId == keyId) {
-                            _ui.update { it.copy(servers = result.data, serversLoading = false) }
-                            pingAll(keyId, result.data)
-                        }
-                    }
-                    is AppResult.Failure -> Unit
-                }
-            }
-        }
-    }
-
-    /** Кнопка «Пинг всех»: перемеряет пинг серверов текущего ключа. */
-    fun pingAllSelected() {
-        val keyId = _ui.value.selectedKeyId ?: return
-        val servers = _ui.value.servers
-        if (servers.isEmpty() || _ui.value.pinging) return
-        // Сбрасываем прошлые значения (показываем «…») и меряем заново.
-        _ui.update { it.copy(servers = it.servers.map { s -> s.copy(pingMs = null) }) }
-        pingAll(keyId, servers)
-    }
-
-    /** Пингует серверы и обновляет их в состоянии по мере готовности. */
-    private fun pingAll(keyId: Long, servers: List<SubscriptionServer>) {
-        pingJob?.cancel()
         _ui.update { it.copy(pinging = true) }
         pingJob = viewModelScope.launch {
             // Ограничиваем число одновременных измерений: параллельные сокеты/DNS
-            // конкурируют за сеть и завышают задержку, из-за чего один и тот же
-            // метод даёт разброс. Небольшой лимит держит значения стабильными.
+            // конкурируют за сеть и завышают задержку. Небольшой лимит держит
+            // значения стабильными.
             val gate = Semaphore(PING_CONCURRENCY)
-            val jobs = servers.map { server ->
+            val jobs = targets.map { (keyId, server) ->
                 launch {
                     val ping = gate.withPermit { pingServer(server) }
-                    // Сохраняем пинг в кэш ключа, чтобы не мерить заново при возврате.
-                    serversByKey[keyId] = serversByKey[keyId].orEmpty().map {
-                        if (it.index == server.index) it.copy(pingMs = ping) else it
-                    }
                     _ui.update { state ->
-                        // Пропускаем, если ключ уже переключён.
-                        if (state.selectedKeyId != keyId) return@update state
-                        state.copy(
-                            servers = state.servers.map {
-                                if (it.index == server.index) it.copy(pingMs = ping) else it
-                            },
-                        )
+                        val list = state.serversByKey[keyId] ?: return@update state
+                        val updated = list.map {
+                            if (it.index == server.index) it.copy(pingMs = ping) else it
+                        }
+                        state.copy(serversByKey = state.serversByKey + (keyId to updated))
                     }
                 }
             }
             jobs.forEach { it.join() }
-            _ui.update { if (it.selectedKeyId == keyId) it.copy(pinging = false) else it }
+            _ui.update { it.copy(pinging = false) }
         }
     }
 
-    /** Выбор сервера из раскрытого списка. */
-    fun selectServer(server: SubscriptionServer) {
-        _ui.update { it.copy(selectedServerIndex = server.index, selectedServerName = server.name) }
+    /**
+     * Выбор сервера из раскрытого списка конкретной подписки. Если уже есть
+     * активное соединение — отключаемся от текущего и подключаемся к новому.
+     */
+    fun selectServer(keyId: Long, server: SubscriptionServer) {
+        _ui.update {
+            it.copy(
+                selectedKeyId = keyId,
+                selectedServerIndex = server.index,
+                selectedServerName = server.name,
+            )
+        }
+        if (isConnectingOrConnected()) {
+            switchTo(keyId, server.index, server.name)
+        }
+    }
+
+    /**
+     * Переключение на другой сервер «на лету»: отключаем текущий туннель,
+     * дожидаемся полной остановки и поднимаем новый.
+     */
+    private fun switchTo(keyId: Long, serverIndex: Int, serverName: String?) {
+        switchJob?.cancel()
+        switchJob = viewModelScope.launch {
+            vpnController.disconnect()
+            // Ждём, пока сервис действительно остановит туннель, иначе новый
+            // CONNECT придёт в ещё живой сервис и наложится на старый.
+            withTimeoutOrNull(SWITCH_TIMEOUT_MS) {
+                stateHolder.state
+                    .filter { it is TunnelState.Disconnected || it is TunnelState.Error }
+                    .first()
+            }
+            vpnController.connect(keyId, serverIndex, serverName)
+        }
     }
 
     /** Активно ли соединение (подключено/подключается). */
@@ -271,10 +278,13 @@ class HomeViewModel @Inject constructor(
 
     private companion object {
         /**
-         * Максимум одновременных измерений пинга (см. [pingAll]). Держим низким:
-         * параллельные TCP-хендшейки конкурируют за сеть и планировщик и дают
-         * всплески задержки (тот же метод — то 20–30 мс, то ~400).
+         * Максимум одновременных измерений пинга (см. [pingAllKeys]). Держим
+         * низким: параллельные TCP-хендшейки конкурируют за сеть и планировщик
+         * и дают всплески задержки (тот же метод — то 20–30 мс, то ~400).
          */
         const val PING_CONCURRENCY = 2
+
+        /** Максимум ожидания остановки туннеля при переключении сервера. */
+        const val SWITCH_TIMEOUT_MS = 5000L
     }
 }
