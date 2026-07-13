@@ -14,20 +14,28 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinityconnect.vpn.domain.model.PingMethod
+import com.infinityconnect.vpn.domain.model.PingMode
+import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.ui.components.GlassCard
 import com.infinityconnect.vpn.ui.components.GradientButton
@@ -168,7 +178,7 @@ private fun PingSection(ui: SettingsUiState, vm: SettingsViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("ПИНГ", style = EyebrowStyle, color = InfinityColors.Muted)
+                Text("ПРОТОКОЛЫ ПИНГА", style = EyebrowStyle, color = InfinityColors.Muted)
                 // Демонстрация цвета текущего метода на примере значения.
                 StatusPill(text = "132 мс", color = pingColor(ui.pingMethod, 132))
             }
@@ -181,9 +191,33 @@ private fun PingSection(ui: SettingsUiState, vm: SettingsViewModel) {
                     onSelect = { vm.selectPingMethod(method) },
                 )
             }
-            Spacer(Modifier.height(4.dp))
+
+            // Режим и таймаут применяются только к прокси-методам (GET/HEAD).
+            val proxyActive = ui.pingMethod.isProxy
+            if (proxyActive) {
+                Spacer(Modifier.height(12.dp))
+                PingModeRow(ui.pingMode, vm::selectPingMode)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "default — берётся лучший из нескольких запросов.\n" +
+                        "double — запрос выполняется дважды в рамках одной сессии ядра; замеряется второй.\n" +
+                        "keepalive — второй запрос замеряет чистую скорость ответа через уже установленное TLS-соединение.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = InfinityColors.Muted,
+                )
+                Spacer(Modifier.height(16.dp))
+                PingTimeoutSlider(ui.pingTimeoutSec, vm::onPingTimeoutChange, vm::savePingTimeout)
+            }
+
+            Spacer(Modifier.height(16.dp))
             Text(
-                text = "Тест-URL для методов через прокси",
+                text = "НАСТРОЙКИ URL-ТЕСТА",
+                style = EyebrowStyle,
+                color = InfinityColors.Muted,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            Text(
+                text = "URL для прокси-методов (GET/HEAD).",
                 style = MaterialTheme.typography.bodySmall,
                 color = InfinityColors.Muted,
                 modifier = Modifier.padding(bottom = 8.dp),
@@ -204,6 +238,75 @@ private fun PingSection(ui: SettingsUiState, vm: SettingsViewModel) {
             )
         }
     }
+}
+
+/** Строка «Режим (via …)» с выпадающим списком Default/Double/Keepalive. */
+@Composable
+private fun PingModeRow(mode: PingMode, onSelect: (PingMode) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Режим (via)",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = InfinityColors.OnSurface,
+        )
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(mode.label(), color = InfinityColors.OnSurface)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            PingMode.entries.forEach { m ->
+                DropdownMenuItem(
+                    text = { Text(m.label()) },
+                    onClick = {
+                        expanded = false
+                        onSelect(m)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Слайдер таймаута прокси-пинга (5..15 с). Пишет в хранилище по отпусканию. */
+@Composable
+private fun PingTimeoutSlider(sec: Int, onChange: (Int) -> Unit, onCommit: () -> Unit) {
+    Text(
+        text = "ТАЙМАУТ ПРОКСИ-ПИНГА",
+        style = EyebrowStyle,
+        color = InfinityColors.Muted,
+        modifier = Modifier.padding(bottom = 4.dp),
+    )
+    Slider(
+        value = sec.toFloat(),
+        onValueChange = { onChange(it.toInt()) },
+        onValueChangeFinished = onCommit,
+        valueRange = PingSettings.MIN_TIMEOUT_SEC.toFloat()..PingSettings.MAX_TIMEOUT_SEC.toFloat(),
+        steps = PingSettings.MAX_TIMEOUT_SEC - PingSettings.MIN_TIMEOUT_SEC - 1,
+        colors = SliderDefaults.colors(
+            thumbColor = InfinityColors.AccentBlue,
+            activeTrackColor = InfinityColors.AccentBlue,
+        ),
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text("${PingSettings.MIN_TIMEOUT_SEC}", style = MaterialTheme.typography.bodySmall, color = InfinityColors.Muted)
+        Text("${sec}s", style = MaterialTheme.typography.bodySmall, color = InfinityColors.OnSurface, fontWeight = FontWeight.SemiBold)
+        Text("${PingSettings.MAX_TIMEOUT_SEC}", style = MaterialTheme.typography.bodySmall, color = InfinityColors.Muted)
+    }
+}
+
+/** Отображаемое название режима прокси-пинга. */
+private fun PingMode.label(): String = when (this) {
+    PingMode.DEFAULT -> "Default"
+    PingMode.DOUBLE -> "Double"
+    PingMode.KEEPALIVE -> "Keepalive"
 }
 
 // ── Общие элементы ──

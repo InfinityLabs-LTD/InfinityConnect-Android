@@ -155,15 +155,27 @@ class XrayConfigBuilder @Inject constructor(
     }
 
     /**
-     * Минимальный конфиг для измерения задержки через ядро
-     * (Libv2ray.measureOutboundDelay): один outbound «proxy» под профиль сервера,
-     * без inbound/TUN/routing. Ядро само поднимает outbound, шлёт HTTP-запрос к
-     * тест-URL через него и возвращает RTT. Даёт «реальный» пинг через протокол
-     * (VLESS/Reality), как в v2RayTun/Happ.
+     * Конфиг для прокси-пинга: локальный SOCKS-inbound на 127.0.0.1:[socksPort]
+     * и outbound «proxy» под профиль сервера, без TUN/routing. Ядро поднимается
+     * без TUN (startLoop с fd=0), клиент гонит HTTP через этот SOCKS-порт своим
+     * методом (GET/HEAD) и режимом (Default/Double/Keepalive) — так меряет
+     * прокси-пинг Happ: end-to-end через протокол (VLESS/Reality).
      */
-    fun buildDelayTestConfig(config: EngineConfig.Vless): String {
+    fun buildProxyPingConfig(config: EngineConfig.Vless, socksPort: Int): String {
         val root = buildJsonObject {
             putJsonObject("log") { put("loglevel", "none") }
+            putJsonArray("inbounds") {
+                addJsonObject {
+                    put("tag", "socks")
+                    put("protocol", "socks")
+                    put("listen", "127.0.0.1")
+                    put("port", socksPort)
+                    putJsonObject("settings") {
+                        put("auth", "noauth")
+                        put("udp", false)
+                    }
+                }
+            }
             putJsonArray("outbounds") {
                 add(buildVlessOutbound(config))
             }

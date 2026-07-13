@@ -2,80 +2,56 @@ package com.infinityconnect.vpn.domain.usecase
 
 import com.infinityconnect.vpn.data.local.SettingsStore
 import com.infinityconnect.vpn.domain.model.PingMethod
-import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.SubscriptionServer
-import com.infinityconnect.vpn.vpn.xray.XrayDelayMeter
+import com.infinityconnect.vpn.vpn.xray.XrayProxyPinger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Измеряет задержку до сервера выбранным методом. Значение — всегда в мс,
- * -1 при недоступности/таймауте.
+ * Измеряет задержку до сервера выбранным протоколом (как в Happ). Значение —
+ * всегда в мс, -1 при недоступности/таймауте.
  *
- * Методы:
+ * Протоколы:
+ *  - [PingMethod.PROXY_GET]/[PingMethod.PROXY_HEAD] — HTTP(S) GET/HEAD к тест-URL
+ *    ЧЕРЕЗ сам протокол сервера (локальный SOCKS-inbound ядра); режим (via …) и
+ *    таймаут — из настроек. Для не-VLESS профилей откат на TCP.
  *  - [PingMethod.TCP]  — время TCP-хендшейка до host:port сервера;
- *  - [PingMethod.ICMP] — ICMP echo (InetAddress.isReachable) до адреса сервера;
- *  - [PingMethod.PROXY_GET]/[PingMethod.PROXY_HEAD] — HTTP(S)-запрос до тест-URL
- *    (по умолчанию Cloudflare), меряет время до первого байта ответа.
+ *  - [PingMethod.ICMP] — ICMP echo (InetAddress.isReachable) до адреса сервера.
  */
 @Singleton
 class PingServerUseCase @Inject constructor(
     private val settingsStore: SettingsStore,
-    private val delayMeter: XrayDelayMeter,
+    private val proxyPinger: XrayProxyPinger,
 ) {
-    private val httpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
-            .readTimeout(TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
-            .callTimeout(TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
-            .build()
-    }
-
     /**
-     * Пинг сервера подписки текущим методом. Принимает весь [server], т.к.
-     * метод REAL меряет задержку через ядро по его профилю ([server.config]).
+     * Пинг сервера подписки текущим протоколом. Принимает весь [server], т.к.
+     * прокси-методы меряют задержку через ядро по его профилю ([server.config]).
      */
     suspend operator fun invoke(server: SubscriptionServer): Int {
         val settings = settingsStore.currentPing()
         return withContext(Dispatchers.IO) {
             when (settings.method) {
-                PingMethod.REAL -> realPing(server, settings.testUrl)
+                PingMethod.PROXY_GET -> proxyPing(server, head = false)
+                PingMethod.PROXY_HEAD -> proxyPing(server, head = true)
                 PingMethod.TCP -> tcpPing(server.address, server.port)
                 PingMethod.ICMP -> icmpPing(server.address)
-                PingMethod.PROXY_GET -> httpPing(settings.testUrl, head = false)
-                PingMethod.PROXY_HEAD -> httpPing(settings.testUrl, head = true)
             }
         }
     }
 
-    /** Пинг по адресу без профиля (методы, не требующие ядра). */
-    suspend fun invokeWith(address: String, port: Int, settings: PingSettings): Int =
-        withContext(Dispatchers.IO) {
-            when (settings.method) {
-                // Без профиля «реальный» пинг невозможен — откатываемся на TCP.
-                PingMethod.REAL, PingMethod.TCP -> tcpPing(address, port)
-                PingMethod.ICMP -> icmpPing(address)
-                PingMethod.PROXY_GET -> httpPing(settings.testUrl, head = false)
-                PingMethod.PROXY_HEAD -> httpPing(settings.testUrl, head = true)
-            }
-        }
-
     /**
-     * «Реальный» пинг через ядро Xray (measureOutboundDelay). Доступен только
-     * для VLESS; для Hysteria2 и при ошибке ядра откатываемся на TCP-хендшейк,
-     * чтобы в списке всё равно было осмысленное значение.
+     * Прокси-пинг через ядро Xray. Доступен только для VLESS; для Hysteria2 и
+     * при ошибке ядра откатываемся на TCP-хендшейк, чтобы в списке всё равно
+     * было осмысленное значение.
      */
-    private fun realPing(server: SubscriptionServer, testUrl: String): Int {
-        val ms = delayMeter.measure(server.config, testUrl)
+    private suspend fun proxyPing(server: SubscriptionServer, head: Boolean): Int {
+        val s = settingsStore.currentPing()
+        val ms = proxyPinger.measure(server.config, s.testUrl, head, s.mode, s.timeoutMs)
         return if (ms >= 0) ms else tcpPing(server.address, server.port)
     }
 
@@ -124,21 +100,6 @@ class PingServerUseCase @Inject constructor(
             -1
         }
     }.getOrDefault(-1)
-
-    private fun httpPing(url: String, head: Boolean): Int = runCatching {
-        val request = Request.Builder()
-            .url(url)
-            .apply { if (head) head() else get() }
-            .header("Cache-Control", "no-cache")
-            .build()
-        val start = System.nanoTime()
-        httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code !in 200..399) {
-                return@runCatching -1
-            }
-            ((System.nanoTime() - start) / 1_000_000).toInt()
-        }
-    }.getOrElse { if (it is IOException) -1 else -1 }
 
     private companion object {
         const val TIMEOUT_MS = 6000

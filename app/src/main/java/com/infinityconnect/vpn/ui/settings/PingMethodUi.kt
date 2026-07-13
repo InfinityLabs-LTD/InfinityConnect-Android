@@ -4,23 +4,20 @@ import androidx.compose.ui.graphics.Color
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 
-/** Отображаемое название метода пинга. */
+/** Отображаемое название протокола пинга. */
 fun PingMethod.title(): String = when (this) {
-    PingMethod.REAL -> "Реальный (через протокол)"
     PingMethod.PROXY_GET -> "Через прокси (GET)"
     PingMethod.PROXY_HEAD -> "Через прокси (HEAD)"
     PingMethod.TCP -> "TCP"
     PingMethod.ICMP -> "ICMP"
 }
 
-/** Пояснение метода пинга для настроек. */
+/** Пояснение протокола пинга для настроек. */
 fun PingMethod.description(): String = when (this) {
-    PingMethod.REAL ->
-        "Задержка через сам протокол сервера (ядро Xray): HTTP-запрос к тест-URL через VLESS/Reality. Самый точный метод. Для Hysteria2 — откат на TCP."
     PingMethod.PROXY_GET ->
-        "HTTP GET до тест-URL: полный ответ. Ближе всего к реальной задержке сайта, но значения выше."
+        "HTTP GET к тест-URL через сам протокол сервера (ядро Xray): полный ответ. Самый точный, но значения выше. Для Hysteria2 — откат на TCP."
     PingMethod.PROXY_HEAD ->
-        "HTTP HEAD до тест-URL: только заголовки, без тела. Легче GET, значения чуть ниже."
+        "HTTP HEAD к тест-URL через протокол сервера: только заголовки, без тела. Легче GET, значения чуть ниже. Для Hysteria2 — откат на TCP."
     PingMethod.TCP ->
         "Время TCP-подключения к серверу (host:port). Чистая задержка до узла, без HTTP/TLS."
     PingMethod.ICMP ->
@@ -33,19 +30,17 @@ fun PingMethod.description(): String = when (this) {
  * своя для каждого.
  */
 fun PingMethod.baseColor(): Color = when (this) {
-    PingMethod.REAL -> InfinityColors.PingReal
     PingMethod.TCP -> InfinityColors.PingTcp
     PingMethod.ICMP -> InfinityColors.PingIcmp
     PingMethod.PROXY_GET -> InfinityColors.PingGet
     PingMethod.PROXY_HEAD -> InfinityColors.PingHead
 }
 
-/** Порог «хорошо/средне» в мс — зависит от метода (HTTP медленнее TCP/ICMP). */
+/** Порог «хорошо/средне» в мс — зависит от метода (прокси медленнее TCP/ICMP). */
 private fun PingMethod.thresholds(): Pair<Int, Int> = when (this) {
-    // REAL идёт через протокол (TLS+HTTP), значения выше чистого TCP/ICMP.
-    PingMethod.REAL -> 200 to 500
-    PingMethod.TCP, PingMethod.ICMP -> 100 to 250
+    // Прокси-методы идут через протокол (TLS+HTTP), значения выше чистого TCP/ICMP.
     PingMethod.PROXY_GET, PingMethod.PROXY_HEAD -> 300 to 700
+    PingMethod.TCP, PingMethod.ICMP -> 100 to 250
 }
 
 /**

@@ -90,7 +90,7 @@ HomeScreen (кнопка Connect)
 |---|---|---|
 | `usecase/BuildConnectionUseCase.kt` | **Ключевой:** строит `EngineConfig` для сервера (подписка → fallback /v1/config). | Keys/Config/SubscriptionRepository, SubscriptionParser |
 | `usecase/GetSubscriptionServersUseCase.kt` | Список серверов подписки для UI (+ кэш). | SubscriptionRepository, SubscriptionParser |
-| `usecase/PingServerUseCase.kt` | Пинг сервера (TCP или реальный через ядро). | XrayDelayMeter, SettingsStore |
+| `usecase/PingServerUseCase.kt` | Пинг сервера: прокси (GET/HEAD через ядро), TCP, ICMP. | XrayProxyPinger, SettingsStore |
 | `usecase/KeysUseCases.kt` | ObserveKeys / SyncKeys. | KeysRepository |
 | `usecase/AuthUseCases.kt` | Login / Logout. | AuthRepository |
 | `engine/EngineConfig.kt` | **Контракт профиля сервера** (sealed: `Vless`, `RawXray`, `Hysteria2`) + `Transport`/`Security`. | — центральный тип между domain и vpn |
@@ -101,7 +101,7 @@ HomeScreen (кнопка Connect)
 | `subscription/UriParsing.kt` | Общие хелперы разбора URI. | — |
 | `model/Models.kt` | Доменные модели (VpnKey, ServerEntry, UserInfo, SubscriptionServer, VpnProtocol …). | — |
 | `model/Result.kt` | `AppResult`/`AppError` (Success/Failure). | — везде |
-| `model/Ping.kt` | `PingMethod`, результат пинга. | — |
+| `model/Ping.kt` | `PingMethod` (Прокси GET/HEAD/TCP/ICMP), `PingMode` (Default/Double/Keepalive), `PingSettings` (метод+режим+URL+таймаут). Схема как в Happ. | — |
 | `model/Routing.kt` | Модель настроек маршрутизации. | — |
 | `repository/Repositories.kt` | **Интерфейсы:** Discovery/Auth/User/Keys/Config Repository. | реализации в data/ |
 | `repository/RoutingRepository.kt` | Интерфейс настроек маршрутизации. | RoutingRepositoryImpl |
@@ -147,7 +147,7 @@ HomeScreen (кнопка Connect)
 | `VpnNotifications.kt` | Канал и построение foreground-уведомления. | — |
 | `xray/XrayEngine.kt` | Движок VLESS/RawXray. | XrayConfigBuilder, XrayCoreBridge, RoutingRepository |
 | `xray/XrayCoreBridge.kt` | JNI-мост к `libv2ray` (initEnv/start/stop/трафик). | libv2ray-stub |
-| `xray/XrayDelayMeter.kt` | **Реальный пинг** через `measureOutboundDelay` ядра Xray. | libv2ray |
+| `xray/XrayProxyPinger.kt` | **Прокси-пинг** как в Happ: поднимает временный инстанс ядра с локальным SOCKS-inbound (`startLoop`, fd=0) по профилю и гонит через него HTTP (GET/HEAD) своим режимом (Default/Double/Keepalive). Замеры сериализованы. | libv2ray, XrayConfigBuilder |
 | `hysteria2/Hysteria2Engine.kt` | Движок Hysteria2. | Hysteria2ConfigBuilder, Hysteria2CoreBridge |
 | `hysteria2/Hysteria2ConfigBuilder.kt` | JSON-конфиг для Go-обёртки Hysteria2. | EngineConfig.Hysteria2 |
 | `hysteria2/Hysteria2CoreBridge.kt` | JNI-мост к `hysteria2.*` (NewTunnel/Close/трафик). | libhysteria2-stub |
@@ -184,8 +184,10 @@ HomeScreen (кнопка Connect)
   только fallback для VLESS-метаданных.
 - **`RawXray`** — «сложный» конфиг панели (balancer/WHITE/автовыбор) пробрасывается в ядро
   целиком, не схлопывается в один outbound. См. memory `white-autoselect-config`.
-- **Премиум/пинг:** премиум — per-key по `host_name`; реальный пинг — `measureOutboundDelay`
-  ядра Xray (`XrayDelayMeter`). См. memory `premium-and-ping-architecture`.
+- **Премиум/пинг:** премиум — per-key по `host_name`. Пинг — 4 протокола как в Happ
+  (Прокси GET/HEAD через ядро, TCP, ICMP) + режим Default/Double/Keepalive + таймаут;
+  прокси-пинг поднимает временный инстанс ядра с SOCKS-inbound (`XrayProxyPinger`).
+  См. memory `premium-and-ping-architecture`.
 
 ---
 

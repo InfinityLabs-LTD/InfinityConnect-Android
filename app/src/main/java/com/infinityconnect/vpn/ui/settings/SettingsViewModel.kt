@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.infinityconnect.vpn.data.local.SettingsStore
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.PingMethod
+import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
@@ -32,7 +33,9 @@ data class SettingsUiState(
     val rulesMessage: String? = null,
     // Пинг
     val pingMethod: PingMethod = PingMethod.TCP,
+    val pingMode: PingMode = PingMode.DEFAULT,
     val pingUrl: String = PingSettings.DEFAULT_TEST_URL,
+    val pingTimeoutSec: Int = PingSettings.DEFAULT_TIMEOUT_SEC,
 )
 
 @HiltViewModel
@@ -71,7 +74,9 @@ class SettingsViewModel @Inject constructor(
         _ui.update {
             it.copy(
                 pingMethod = p.method,
+                pingMode = p.mode,
                 pingUrl = if (pingUrlEdited) it.pingUrl else p.testUrl,
+                pingTimeoutSec = p.timeoutSec,
             )
         }
     }
@@ -111,6 +116,22 @@ class SettingsViewModel @Inject constructor(
     fun selectPingMethod(method: PingMethod) {
         _ui.update { it.copy(pingMethod = method) }
         viewModelScope.launch { settingsStore.setPingMethod(method) }
+    }
+
+    fun selectPingMode(mode: PingMode) {
+        _ui.update { it.copy(pingMode = mode) }
+        viewModelScope.launch { settingsStore.setPingMode(mode) }
+    }
+
+    /** Живое обновление слайдера таймаута (без записи в хранилище на каждый тик). */
+    fun onPingTimeoutChange(sec: Int) {
+        _ui.update { it.copy(pingTimeoutSec = sec) }
+    }
+
+    /** Фиксация таймаута в хранилище (по отпусканию слайдера). */
+    fun savePingTimeout() {
+        val sec = _ui.value.pingTimeoutSec
+        viewModelScope.launch { settingsStore.setPingTimeout(sec) }
     }
 
     fun onPingUrlChange(url: String) {

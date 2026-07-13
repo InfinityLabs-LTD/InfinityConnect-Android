@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.infinityconnect.vpn.data.remote.dto.DiscoveryDto
+import androidx.datastore.preferences.core.intPreferencesKey
 import com.infinityconnect.vpn.domain.model.PingMethod
+import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
@@ -65,11 +67,13 @@ class SettingsStore @Inject constructor(
 
     suspend fun currentRouting(): RoutingSettings = routing.first()
 
-    /** Настройки пинга (метод + тест-URL). */
+    /** Настройки пинга (протокол + режим + тест-URL + таймаут). */
     val ping: Flow<PingSettings> = context.dataStore.data.map { prefs ->
         PingSettings(
             method = PingMethod.from(prefs[KEY_PING_METHOD]),
+            mode = PingMode.from(prefs[KEY_PING_MODE]),
             testUrl = prefs[KEY_PING_URL]?.takeIf { it.isNotBlank() } ?: PingSettings.DEFAULT_TEST_URL,
+            timeoutSec = prefs[KEY_PING_TIMEOUT] ?: PingSettings.DEFAULT_TIMEOUT_SEC,
         )
     }
 
@@ -77,8 +81,18 @@ class SettingsStore @Inject constructor(
         context.dataStore.edit { it[KEY_PING_METHOD] = method.name }
     }
 
+    suspend fun setPingMode(mode: PingMode) {
+        context.dataStore.edit { it[KEY_PING_MODE] = mode.name }
+    }
+
     suspend fun setPingUrl(url: String) {
         context.dataStore.edit { it[KEY_PING_URL] = url }
+    }
+
+    suspend fun setPingTimeout(sec: Int) {
+        context.dataStore.edit {
+            it[KEY_PING_TIMEOUT] = sec.coerceIn(PingSettings.MIN_TIMEOUT_SEC, PingSettings.MAX_TIMEOUT_SEC)
+        }
     }
 
     suspend fun currentPing(): PingSettings = ping.first()
@@ -108,6 +122,8 @@ class SettingsStore @Inject constructor(
         val KEY_ROUTING_RULES_JSON = stringPreferencesKey("routing_rules_json")
         val KEY_ROUTING_RULES_AT = longPreferencesKey("routing_rules_at")
         val KEY_PING_METHOD = stringPreferencesKey("ping_method")
+        val KEY_PING_MODE = stringPreferencesKey("ping_mode")
         val KEY_PING_URL = stringPreferencesKey("ping_url")
+        val KEY_PING_TIMEOUT = intPreferencesKey("ping_timeout_sec")
     }
 }
