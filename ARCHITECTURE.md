@@ -144,7 +144,7 @@ HomeScreen (кнопка Connect)
 
 | Файл | За что отвечает | Связи |
 |---|---|---|
-| `InfinityVpnService.kt` | **Foreground `VpnService`:** TUN, команды CONNECT/DISCONNECT, статистика, уведомление. | BuildConnectionUseCase, EngineSelector, VpnStateHolder |
+| `InfinityVpnService.kt` | **Foreground `VpnService`:** TUN, команды CONNECT/DISCONNECT, статистика, уведомление, per-app split-tunnel, слежение за сетью (`registerDefaultNetworkCallback` + `setUnderlyingNetworks` — туннель переживает Wi-Fi ↔ мобильный). | BuildConnectionUseCase, EngineSelector, VpnStateHolder, RoutingRepository |
 | `VpnController.kt` | Фасад для UI: шлёт Intent'ы сервису, `prepareIntent()` разрешения. | InfinityVpnService |
 | `EngineSelector.kt` | Выбор движка по `EngineConfig`: Vless/RawXray→Xray, Hy2→Hysteria2. | XrayEngine, Hysteria2Engine |
 | `VpnEngine.kt` | **Интерфейс движка** (`supports`/`start`/`stop`/`queryStats`). | реализации ниже |

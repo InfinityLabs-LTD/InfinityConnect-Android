@@ -2,6 +2,8 @@ package com.infinityconnect.vpn.vpn
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -42,6 +44,15 @@ class InfinityVpnService : VpnService() {
     private var tunInterface: ParcelFileDescriptor? = null
     private var activeEngine: VpnEngine? = null
     private var statsJob: Job? = null
+
+    /**
+     * Колбэк смены нижележащей сети. При Wi-Fi ↔ мобильный система меняет
+     * default network — мы сообщаем её туннелю через [setUnderlyingNetworks],
+     * чтобы TUN не «завис» на исчезнувшей сети и учёт трафика/энергосбережение
+     * оставались корректными. Сокеты ядра (через protect) переустановятся на
+     * новую сеть автоматически при следующем запросе.
+     */
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var sessionStartMs: Long = 0
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -84,6 +95,9 @@ class InfinityVpnService : VpnService() {
                     return@launch
                 }
                 tunInterface = tun
+
+                // Следим за нижележащей сетью — туннель переживает Wi-Fi ↔ мобильный.
+                registerNetworkCallback()
 
                 // Если ядро само остановится (разрыв) — отражаем это в UI.
                 val onCoreStopped = { if (activeEngine != null) stopWithError("Соединение разорвано") }
@@ -171,6 +185,48 @@ class InfinityVpnService : VpnService() {
         }
     }
 
+    /**
+     * Регистрирует слежение за default-сетью и прокидывает её как underlying для
+     * туннеля. При Wi-Fi ↔ мобильный система переносит default network — TUN
+     * должен «переехать» на неё, иначе трафик зависнет на исчезнувшей сети.
+     * `setUnderlyingNetworks(null)` означало бы «следовать за системным default»,
+     * но явная привязка к текущей сети надёжнее для учёта трафика и хендовера.
+     */
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // default-сеть сменилась (Wi-Fi ↔ мобильный) — отдаём новую туннелю.
+                runCatching { setUnderlyingNetworks(arrayOf(network)) }
+                Log.i(TAG, "Underlying network → $network")
+            }
+
+            override fun onLost(network: Network) {
+                // Текущая сеть пропала. Не сбрасываем в null — ждём onAvailable
+                // следующей default-сети; система придержит пакеты до переключения.
+                Log.i(TAG, "Underlying network потеряна: $network")
+            }
+        }
+        runCatching {
+            // registerDefaultNetworkCallback отслеживает СМЕНУ активной сети и не
+            // требует CHANGE_NETWORK_STATE (в отличие от requestNetwork) — только
+            // ACCESS_NETWORK_STATE, который у нас уже есть.
+            cm.registerDefaultNetworkCallback(callback)
+            networkCallback = callback
+            // Привязываем активную сеть сразу, не дожидаясь первого колбэка.
+            cm.activeNetwork?.let { runCatching { setUnderlyingNetworks(arrayOf(it)) } }
+        }.onFailure { Log.w(TAG, "Не удалось зарегистрировать NetworkCallback: ${it.message}") }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val cb = networkCallback ?: return
+        networkCallback = null
+        runCatching {
+            getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb)
+        }
+    }
+
     /** Периодически опрашивает статистику движка и обновляет состояние/уведомление. */
     private fun startStatsLoop(engine: VpnEngine) {
         statsJob?.cancel()
@@ -208,6 +264,7 @@ class InfinityVpnService : VpnService() {
         stateHolder.updateState(TunnelState.Disconnecting)
         statsJob?.cancel()
         statsJob = null
+        unregisterNetworkCallback()
         runCatching { activeEngine?.stop() }
         activeEngine = null
         runCatching { tunInterface?.close() }
@@ -220,6 +277,7 @@ class InfinityVpnService : VpnService() {
     private fun stopWithError(message: String) {
         Log.w(TAG, "Остановка с ошибкой: $message")
         statsJob?.cancel()
+        unregisterNetworkCallback()
         runCatching { activeEngine?.stop() }
         activeEngine = null
         runCatching { tunInterface?.close() }
@@ -275,6 +333,7 @@ class InfinityVpnService : VpnService() {
 
     override fun onDestroy() {
         scope.cancel()
+        unregisterNetworkCallback()
         runCatching { activeEngine?.stop() }
         runCatching { tunInterface?.close() }
         super.onDestroy()
