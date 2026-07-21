@@ -188,6 +188,10 @@ HomeScreen (кнопка Connect)
 - **`VpnStateHolder`** — единственный источник состояния туннеля для UI.
 - **Подписка первична:** `BuildConnectionUseCase` берёт конфиг из подписки; `/v1/config` —
   только fallback для VLESS-метаданных.
+- **Офлайн-режим (как Happ/INCY):** три диск-кэша переживают перезапуск — discovery
+  и ключи (JSON в `SettingsStore`/DataStore), тела подписок (`SubscriptionCacheStore`).
+  `KeysRepositoryImpl.key()` берёт ключ из кэша (сеть — только при промахе), поэтому
+  список серверов виден и connect строит конфиг без интернета. См. memory `offline-mode`.
 - **`RawXray`** — «сложный» конфиг панели (balancer/WHITE/автовыбор) пробрасывается в ядро
   целиком, не схлопывается в один outbound. См. memory `white-autoselect-config`.
 - **Маршрутизация 2 уровней:** *по приложениям* (split-tunnel) — на уровне

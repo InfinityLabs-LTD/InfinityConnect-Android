@@ -131,6 +131,14 @@ class SettingsStore @Inject constructor(
         context.dataStore.edit { it[KEY_DISCOVERY] = json.encodeToString(dto) }
     }
 
+    /** Персист списка ключей (сырой JSON ответа /v1/keys) для офлайн-старта. */
+    suspend fun saveKeysJson(raw: String) {
+        context.dataStore.edit { it[KEY_KEYS_JSON] = raw }
+    }
+
+    /** Сохранённый JSON ключей (или null) — читается при холодном старте. */
+    suspend fun currentKeysJson(): String? = context.dataStore.data.first()[KEY_KEYS_JSON]
+
     /** Синхронное чтение кэша discovery при инициализации (может быть null). */
     suspend fun currentDiscovery(): DiscoveryDto? = discoveryJson.first()
 
@@ -143,6 +151,7 @@ class SettingsStore @Inject constructor(
     private companion object {
         val KEY_DOMAIN = stringPreferencesKey("server_domain")
         val KEY_DISCOVERY = stringPreferencesKey("discovery_json")
+        val KEY_KEYS_JSON = stringPreferencesKey("keys_json")
         val KEY_ROUTING_MODE = stringPreferencesKey("routing_mode")
         val KEY_ROUTING_RULES_URL = stringPreferencesKey("routing_rules_url")
         val KEY_ROUTING_RULES_JSON = stringPreferencesKey("routing_rules_json")
