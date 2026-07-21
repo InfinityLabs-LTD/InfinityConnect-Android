@@ -324,7 +324,6 @@ private fun AboutSection() {
             InfoRow("Версия", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             InfoRow("Ядро Xray", BuildFlags.XRAY_CORE_VERSION)
             InfoRow("Ядро Hysteria2", BuildFlags.HYSTERIA2_CORE_VERSION)
-            InfoRow("Сервер", BuildFlags.SERVER_DOMAIN)
         }
     }
 }

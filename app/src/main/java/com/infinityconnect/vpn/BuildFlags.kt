@@ -17,8 +17,9 @@ object BuildFlags {
     /**
      * Версии нативных ядер, вкомпилированных в AAR (app/libs).
      * Держим строками — точные версии не экспонируются рантаймом gomobile-обёрток.
-     * Обновлять при замене AAR: см. github.com/xtls/xray-core и apernet/hysteria.
+     * Xray: формат релиза YY.M.D (из go-модуля v1.260327.1 → тег 26.3.27).
+     * Обновлять вручную при замене AAR: github.com/xtls/xray-core и apernet/hysteria.
      */
-    const val XRAY_CORE_VERSION = "1.260327.1"
+    const val XRAY_CORE_VERSION = "26.3.27"
     const val HYSTERIA2_CORE_VERSION = "2.x"
 }
