@@ -78,8 +78,13 @@ HomeScreen (кнопка Connect)
 | `home/ConnectHero.kt`, `home/HomeComponents.kt` | Составные Compose-компоненты главного экрана. | — |
 | `auth/AuthScreen.kt` + `AuthViewModel.kt` | Экран входа по логину/паролю. | AuthUseCases |
 | `profile/ProfileScreen.kt` + `ProfileViewModel.kt` | Аккаунт, подписка, разлогин. | UserRepository, LogoutUseCase |
-| `settings/SettingsScreen.kt` + `SettingsViewModel.kt` | Настройки (метод пинга, маршрутизация, per-app split-tunnel, домены, «О приложении»). | SettingsStore, RoutingRepository |
-| `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app маршрутизации (общий VM с настройками через backstack-entry SETTINGS). | SettingsViewModel |
+| `settings/SettingsScreen.kt` | **Хаб-меню настроек:** 3 пункта → Маршрутизация / Настройки пинга / О приложении. | навигация |
+| `settings/SettingsViewModel.kt` | VM всех экранов настроек (маршрутизация + пинг + список приложений). Общий инстанс для подэкранов через backstack-entry SETTINGS. | SettingsStore, RoutingRepository |
+| `settings/RoutingScreen.kt` | Экран маршрутизации: per-app split-tunnel + домены. Общий режим = ALL (выбор режима и загрузка конфига правил убраны из UI). | SettingsViewModel |
+| `settings/PingScreen.kt` | Экран настроек пинга (протокол/режим/таймаут/URL). | SettingsViewModel |
+| `settings/AboutScreen.kt` | Экран «О приложении» (версия, ядра, разработчик). | BuildConfig/BuildFlags |
+| `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app (общий VM через backstack-entry SETTINGS). | SettingsViewModel |
+| `settings/SettingsCommon.kt` | Общие Compose-элементы экранов настроек (SettingsScaffold/SectionTitle/OptionRow/fieldColors). | — |
 | `settings/PingMethodUi.kt` | UI-модель метода пинга. | domain.model.PingMethod |
 | `components/Common.kt`, `components/Design.kt` | Переиспользуемые Compose-виджеты. | — |
 | `theme/Theme.kt` | Тема Material. | — |

@@ -7,5 +7,8 @@ object Routes {
     const val HOME = "home"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
+    const val ROUTING = "routing"
+    const val PING = "ping"
+    const val ABOUT = "about"
     const val APP_PICKER = "app_picker"
 }

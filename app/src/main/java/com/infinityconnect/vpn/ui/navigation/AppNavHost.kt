@@ -15,7 +15,10 @@ import com.infinityconnect.vpn.ui.components.FullScreenLoading
 import com.infinityconnect.vpn.ui.components.FullScreenMessage
 import com.infinityconnect.vpn.ui.home.HomeScreen
 import com.infinityconnect.vpn.ui.profile.ProfileScreen
+import com.infinityconnect.vpn.ui.settings.AboutScreen
 import com.infinityconnect.vpn.ui.settings.AppPickerScreen
+import com.infinityconnect.vpn.ui.settings.PingScreen
+import com.infinityconnect.vpn.ui.settings.RoutingScreen
 import com.infinityconnect.vpn.ui.settings.SettingsScreen
 import com.infinityconnect.vpn.ui.settings.SettingsViewModel
 
@@ -89,25 +92,57 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             )
         }
 
+        // Настройки — хаб-меню из отдельных пунктов.
         composable(Routes.SETTINGS) {
             SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenRouting = { navController.navigate(Routes.ROUTING) },
+                onOpenPing = { navController.navigate(Routes.PING) },
+                onOpenAbout = { navController.navigate(Routes.ABOUT) },
+            )
+        }
+
+        composable(Routes.ROUTING) { entry ->
+            RoutingScreen(
+                viewModel = sharedSettingsVm(navController, entry),
                 onBack = { navController.popBackStack() },
                 onOpenAppPicker = { navController.navigate(Routes.APP_PICKER) },
             )
         }
 
+        composable(Routes.PING) { entry ->
+            PingScreen(
+                viewModel = sharedSettingsVm(navController, entry),
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.ABOUT) {
+            AboutScreen(onBack = { navController.popBackStack() })
+        }
+
         composable(Routes.APP_PICKER) { entry ->
-            // Общий ViewModel с экраном настроек (scope — backstack-entry SETTINGS),
-            // чтобы выбор приложений и переключатели жили в одном состоянии.
-            val settingsEntry = androidx.compose.runtime.remember(entry) {
-                navController.getBackStackEntry(Routes.SETTINGS)
-            }
-            val vm: SettingsViewModel = hiltViewModel(settingsEntry)
             AppPickerScreen(
-                viewModel = vm,
+                viewModel = sharedSettingsVm(navController, entry),
                 onBack = { navController.popBackStack() },
             )
         }
     }
+}
+
+/**
+ * Возвращает [SettingsViewModel], привязанный к backstack-entry SETTINGS —
+ * общий для всех подэкранов настроек (маршрутизация, пинг, выбор приложений).
+ * Так их состояние и кэш живут в одном инстансе.
+ */
+@Composable
+private fun sharedSettingsVm(
+    navController: NavHostController,
+    entry: androidx.navigation.NavBackStackEntry,
+): SettingsViewModel {
+    val settingsEntry = androidx.compose.runtime.remember(entry) {
+        navController.getBackStackEntry(Routes.SETTINGS)
+    }
+    return hiltViewModel(settingsEntry)
 }
 
