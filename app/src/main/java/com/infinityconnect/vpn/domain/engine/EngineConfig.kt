@@ -89,11 +89,19 @@ sealed interface Transport {
     /**
      * XHTTP (SplitHTTP) — современный транспорт Xray.
      * mode: auto | packet-up | stream-up | stream-one.
+     *
+     * @param extra «сырой» объект extra из xhttpSettings подписки/URI
+     *   (xmux, xPadding, session, seq, uplink/downlink, maxTimediff и т.д.).
+     *   Панель Remnawave кладёт туда параметры маскировки под белые списки
+     *   (например XHTTP-профиль cart/sync). Клиент их не интерпретирует, а
+     *   пробрасывает в ядро целиком — иначе Xray-сервер отвергает соединение
+     *   (несовпадение session/seq/padding с серверными ожиданиями).
      */
     data class Xhttp(
         val path: String?,
         val host: String?,
         val mode: String?,
+        val extra: JsonObject? = null,
     ) : Transport
 }
 

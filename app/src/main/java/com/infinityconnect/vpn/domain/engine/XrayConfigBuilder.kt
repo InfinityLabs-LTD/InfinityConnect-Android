@@ -307,6 +307,9 @@ class XrayConfigBuilder @Inject constructor(
                 t.path?.let { put("path", it) }
                 t.host?.let { put("host", it) }
                 t.mode?.let { put("mode", it) }
+                // extra (xmux/xPadding/session/seq/uplink/…) — пробрасываем как
+                // есть: сервер белых списков сверяет эти поля, без них рвёт связь.
+                t.extra?.let { put("extra", it) }
             }
         }
     }

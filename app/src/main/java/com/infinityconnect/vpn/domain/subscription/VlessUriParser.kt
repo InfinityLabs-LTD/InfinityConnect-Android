@@ -3,6 +3,8 @@ package com.infinityconnect.vpn.domain.subscription
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.domain.engine.Security
 import com.infinityconnect.vpn.domain.engine.Transport
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Разбор VLESS-URI в [EngineConfig.Vless].
@@ -89,6 +91,9 @@ internal object VlessUriParser {
                 path = p["path"],
                 host = p["host"],
                 mode = p["mode"],
+                // extra в vless://-URI — это URL-encoded JSON (xmux/xPadding/…).
+                // UriParsing.parseQuery уже раскодировал %xx, осталось разобрать JSON.
+                extra = parseExtraJson(p["extra"]),
             )
             // tcp/raw/пусто
             else -> Transport.Tcp
@@ -116,4 +121,12 @@ internal object VlessUriParser {
             else -> Security.None
         }
     }
+
+    /** Разбирает значение параметра `extra` (JSON-объект) из vless://-URI. */
+    private fun parseExtraJson(raw: String?): JsonObject? {
+        val text = raw?.trim()?.takeIf { it.startsWith("{") } ?: return null
+        return runCatching { LENIENT_JSON.parseToJsonElement(text) as? JsonObject }.getOrNull()
+    }
+
+    private val LENIENT_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
 }

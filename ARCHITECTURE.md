@@ -93,7 +93,7 @@ HomeScreen (кнопка Connect)
 | `usecase/PingServerUseCase.kt` | Пинг сервера: прокси (GET/HEAD через ядро), TCP, ICMP. | XrayProxyPinger, SettingsStore |
 | `usecase/KeysUseCases.kt` | ObserveKeys / SyncKeys. | KeysRepository |
 | `usecase/AuthUseCases.kt` | Login / Logout. | AuthRepository |
-| `engine/EngineConfig.kt` | **Контракт профиля сервера** (sealed: `Vless`, `RawXray`, `Hysteria2`) + `Transport`/`Security`. | — центральный тип между domain и vpn |
+| `engine/EngineConfig.kt` | **Контракт профиля сервера** (sealed: `Vless`, `RawXray`, `Hysteria2`) + `Transport`/`Security`. `Transport.Xhttp` несёт сырой `extra` (xmux/xPadding/session/seq/…) — пробрасывается в ядро без интерпретации. | — центральный тип между domain и vpn |
 | `engine/XrayConfigBuilder.kt` | Собирает JSON-конфиг Xray (`build` для Vless, `buildRaw` для RawXray). | EngineConfig, Routing |
 | `subscription/SubscriptionParser.kt` | **Парсер тела подписки** → `List<EngineConfig>` (JSON-массив Xray / base64 / список URI). | VlessUriParser, Hysteria2UriParser, EngineConfig |
 | `subscription/VlessUriParser.kt` | Парсит `vless://` URI. | EngineConfig.Vless |

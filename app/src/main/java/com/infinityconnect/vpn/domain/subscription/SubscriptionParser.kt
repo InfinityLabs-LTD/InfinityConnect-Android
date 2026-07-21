@@ -212,6 +212,9 @@ class SubscriptionParser @Inject constructor(
                     path = xh?.get("path")?.str(),
                     host = xh?.get("host")?.str(),
                     mode = xh?.get("mode")?.str(),
+                    // extra (xmux/xPadding/session/seq/…) несём как есть —
+                    // без него сервер белых списков отвергает соединение.
+                    extra = xh?.get("extra")?.jsonObject,
                 )
             }
             else -> Transport.Tcp

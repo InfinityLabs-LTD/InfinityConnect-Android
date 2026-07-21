@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.BuildConfig
+import com.infinityconnect.vpn.BuildFlags
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
@@ -90,6 +92,7 @@ fun SettingsScreen(
             RoutingSection(ui, viewModel)
             RulesSection(ui, viewModel)
             PingSection(ui, viewModel)
+            AboutSection()
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -307,6 +310,45 @@ private fun PingMode.label(): String = when (this) {
     PingMode.DEFAULT -> "Default"
     PingMode.DOUBLE -> "Double"
     PingMode.KEEPALIVE -> "Keepalive"
+}
+
+// ── О приложении ──
+
+@Composable
+private fun AboutSection() {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SectionTitle("О ПРИЛОЖЕНИИ")
+            InfoRow("Приложение", "Infinity Connect")
+            InfoRow("Разработчик", BuildFlags.DEVELOPER)
+            InfoRow("Версия", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            InfoRow("Ядро Xray", BuildFlags.XRAY_CORE_VERSION)
+            InfoRow("Ядро Hysteria2", BuildFlags.HYSTERIA2_CORE_VERSION)
+            InfoRow("Сервер", BuildFlags.SERVER_DOMAIN)
+        }
+    }
+}
+
+/** Строка «ключ — значение» для раздела «О приложении». */
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = InfinityColors.Muted,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = InfinityColors.OnSurface,
+        )
+    }
 }
 
 // ── Общие элементы ──
