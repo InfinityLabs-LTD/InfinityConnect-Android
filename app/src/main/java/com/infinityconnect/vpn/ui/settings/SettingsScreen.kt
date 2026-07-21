@@ -45,10 +45,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinityconnect.vpn.BuildConfig
 import com.infinityconnect.vpn.BuildFlags
+import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.RoutingMode
+import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.ui.components.GlassCard
 import com.infinityconnect.vpn.ui.components.GradientButton
 import com.infinityconnect.vpn.ui.components.StatusPill
@@ -61,6 +63,7 @@ import com.infinityconnect.vpn.ui.util.formatDateTime
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenAppPicker: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
@@ -90,6 +93,8 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             RoutingSection(ui, viewModel)
+            AppRoutingSection(ui, viewModel, onOpenAppPicker)
+            SiteRoutingSection(ui, viewModel)
             RulesSection(ui, viewModel)
             PingSection(ui, viewModel)
             AboutSection()
@@ -310,6 +315,96 @@ private fun PingMode.label(): String = when (this) {
     PingMode.DEFAULT -> "Default"
     PingMode.DOUBLE -> "Double"
     PingMode.KEEPALIVE -> "Keepalive"
+}
+
+// ── Маршрутизация по приложениям ──
+
+@Composable
+private fun AppRoutingSection(ui: SettingsUiState, vm: SettingsViewModel, onOpenAppPicker: () -> Unit) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SectionTitle("ПО ПРИЛОЖЕНИЯМ")
+            OptionRow(
+                title = "Выключено",
+                subtitle = "Весь трафик приложений — по общим правилам",
+                selected = ui.appMode == AppRoutingMode.OFF,
+                onSelect = { vm.selectAppMode(AppRoutingMode.OFF) },
+            )
+            OptionRow(
+                title = "Только выбранные — через VPN",
+                subtitle = "Остальные приложения идут напрямую",
+                selected = ui.appMode == AppRoutingMode.ALLOW,
+                onSelect = { vm.selectAppMode(AppRoutingMode.ALLOW) },
+            )
+            OptionRow(
+                title = "Все, кроме выбранных",
+                subtitle = "Выбранные приложения идут напрямую (в обход VPN)",
+                selected = ui.appMode == AppRoutingMode.DISALLOW,
+                onSelect = { vm.selectAppMode(AppRoutingMode.DISALLOW) },
+            )
+            if (ui.appMode != AppRoutingMode.OFF) {
+                Spacer(Modifier.height(12.dp))
+                GradientButton(
+                    text = "Выбрать приложения (${ui.selectedApps.size})",
+                    onClick = onOpenAppPicker,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+// ── Маршрутизация по сайтам ──
+
+@Composable
+private fun SiteRoutingSection(ui: SettingsUiState, vm: SettingsViewModel) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SectionTitle("ПО САЙТАМ")
+            Text(
+                text = "Доменные правила применяются на VLESS-серверах. " +
+                    "На серверах Hysteria2 список сайтов не действует.",
+                style = MaterialTheme.typography.bodySmall,
+                color = InfinityColors.Muted,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            OptionRow(
+                title = "Выключено",
+                subtitle = "Список доменов не используется",
+                selected = ui.siteMode == SiteRoutingMode.OFF,
+                onSelect = { vm.selectSiteMode(SiteRoutingMode.OFF) },
+            )
+            OptionRow(
+                title = "Домены — через VPN",
+                subtitle = "Указанные сайты идут через VPN, остальное — по общему режиму",
+                selected = ui.siteMode == SiteRoutingMode.PROXY,
+                onSelect = { vm.selectSiteMode(SiteRoutingMode.PROXY) },
+            )
+            OptionRow(
+                title = "Домены — напрямую",
+                subtitle = "Указанные сайты идут в обход VPN",
+                selected = ui.siteMode == SiteRoutingMode.DIRECT,
+                onSelect = { vm.selectSiteMode(SiteRoutingMode.DIRECT) },
+            )
+            if (ui.siteMode != SiteRoutingMode.OFF) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = ui.sitesText,
+                    onValueChange = vm::onSitesChange,
+                    label = { Text("Домены (по одному на строку)") },
+                    placeholder = { Text("youtube.com\nnetflix.com") },
+                    colors = fieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                GradientButton(
+                    text = "Сохранить список",
+                    onClick = vm::saveSites,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
 }
 
 // ── О приложении ──

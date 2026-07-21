@@ -1,17 +1,23 @@
 package com.infinityconnect.vpn.ui.settings
 
+import android.content.Context
+import android.content.pm.ApplicationInfo
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinityconnect.vpn.data.local.SettingsStore
 import com.infinityconnect.vpn.domain.model.AppResult
+import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import com.infinityconnect.vpn.ui.util.toMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +25,15 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+/** Установленное приложение для экрана выбора per-app маршрутизации. */
+data class InstalledApp(
+    val packageName: String,
+    val label: String,
+    val isSystem: Boolean,
+)
 
 /** UI-состояние экрана настроек (маршрутизация + пинг). */
 data class SettingsUiState(
@@ -31,6 +45,12 @@ data class SettingsUiState(
     val downloading: Boolean = false,
     val rulesError: String? = null,
     val rulesMessage: String? = null,
+    // Маршрутизация по приложениям
+    val appMode: AppRoutingMode = AppRoutingMode.OFF,
+    val selectedApps: Set<String> = emptySet(),
+    // Маршрутизация по сайтам
+    val siteMode: SiteRoutingMode = SiteRoutingMode.OFF,
+    val sitesText: String = "",
     // Пинг
     val pingMethod: PingMethod = PingMethod.TCP,
     val pingMode: PingMode = PingMode.DEFAULT,
@@ -42,13 +62,19 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     private val routingRepository: RoutingRepository,
     private val settingsStore: SettingsStore,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(SettingsUiState())
     val ui: StateFlow<SettingsUiState> = _ui.asStateFlow()
 
+    /** Кэш списка установленных приложений (грузится один раз по требованию). */
+    private val _apps = MutableStateFlow<List<InstalledApp>>(emptyList())
+    val apps: StateFlow<List<InstalledApp>> = _apps.asStateFlow()
+
     private var rulesUrlEdited = false
     private var pingUrlEdited = false
+    private var sitesEdited = false
 
     init {
         routingRepository.settings
@@ -66,6 +92,10 @@ class SettingsViewModel @Inject constructor(
                 rulesUrl = if (rulesUrlEdited) it.rulesUrl else (s.rulesUrl ?: ""),
                 rulesUpdatedAt = s.rulesUpdatedAt,
                 hasRules = s.rulesJson != null,
+                appMode = s.appMode,
+                selectedApps = s.apps,
+                siteMode = s.siteMode,
+                sitesText = if (sitesEdited) it.sitesText else s.sites.joinToString("\n"),
             )
         }
     }
@@ -109,6 +139,69 @@ class SettingsViewModel @Inject constructor(
                     _ui.update { it.copy(downloading = false, rulesError = r.error.toMessage()) }
             }
         }
+    }
+
+    // ── Маршрутизация по приложениям ──
+
+    fun selectAppMode(mode: AppRoutingMode) {
+        _ui.update { it.copy(appMode = mode) }
+        viewModelScope.launch { routingRepository.setAppMode(mode) }
+        if (mode != AppRoutingMode.OFF) loadApps()
+    }
+
+    /** Переключает вхождение пакета в allow/disallow-список. */
+    fun toggleApp(packageName: String) {
+        val next = _ui.value.selectedApps.toMutableSet().apply {
+            if (!add(packageName)) remove(packageName)
+        }
+        _ui.update { it.copy(selectedApps = next) }
+        viewModelScope.launch { routingRepository.setApps(next) }
+    }
+
+    /** Лениво загружает список установленных приложений (тяжёлая операция → IO). */
+    fun loadApps() {
+        if (_apps.value.isNotEmpty()) return
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) {
+                val pm = appContext.packageManager
+                pm.getInstalledApplications(0)
+                    .filter { it.packageName != appContext.packageName }
+                    // Оставляем приложения с интернетом — остальные бессмысленны для VPN.
+                    .map {
+                        InstalledApp(
+                            packageName = it.packageName,
+                            label = pm.getApplicationLabel(it).toString(),
+                            isSystem = (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                        )
+                    }
+                    .sortedWith(compareBy({ it.isSystem }, { it.label.lowercase() }))
+            }
+            _apps.update { list }
+        }
+    }
+
+    // ── Маршрутизация по сайтам ──
+
+    fun selectSiteMode(mode: SiteRoutingMode) {
+        _ui.update { it.copy(siteMode = mode) }
+        viewModelScope.launch { routingRepository.setSiteMode(mode) }
+    }
+
+    fun onSitesChange(text: String) {
+        sitesEdited = true
+        _ui.update { it.copy(sitesText = text) }
+    }
+
+    /** Сохраняет список доменов (по кнопке): по одному на строку/через запятую. */
+    fun saveSites() {
+        val domains = _ui.value.sitesText
+            .split('\n', ',', ' ')
+            .map { it.trim().removePrefix("https://").removePrefix("http://").trimEnd('/') }
+            .filter { it.isNotBlank() }
+            .distinct()
+        sitesEdited = false
+        _ui.update { it.copy(sitesText = domains.joinToString("\n")) }
+        viewModelScope.launch { routingRepository.setSites(domains) }
     }
 
     // ── Пинг ──

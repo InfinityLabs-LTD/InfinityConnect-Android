@@ -78,7 +78,8 @@ HomeScreen (кнопка Connect)
 | `home/ConnectHero.kt`, `home/HomeComponents.kt` | Составные Compose-компоненты главного экрана. | — |
 | `auth/AuthScreen.kt` + `AuthViewModel.kt` | Экран входа по логину/паролю. | AuthUseCases |
 | `profile/ProfileScreen.kt` + `ProfileViewModel.kt` | Аккаунт, подписка, разлогин. | UserRepository, LogoutUseCase |
-| `settings/SettingsScreen.kt` + `SettingsViewModel.kt` | Настройки (метод пинга, маршрутизация). | SettingsStore, RoutingRepository |
+| `settings/SettingsScreen.kt` + `SettingsViewModel.kt` | Настройки (метод пинга, маршрутизация, per-app split-tunnel, домены, «О приложении»). | SettingsStore, RoutingRepository |
+| `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app маршрутизации (общий VM с настройками через backstack-entry SETTINGS). | SettingsViewModel |
 | `settings/PingMethodUi.kt` | UI-модель метода пинга. | domain.model.PingMethod |
 | `components/Common.kt`, `components/Design.kt` | Переиспользуемые Compose-виджеты. | — |
 | `theme/Theme.kt` | Тема Material. | — |
@@ -184,6 +185,11 @@ HomeScreen (кнопка Connect)
   только fallback для VLESS-метаданных.
 - **`RawXray`** — «сложный» конфиг панели (balancer/WHITE/автовыбор) пробрасывается в ядро
   целиком, не схлопывается в один outbound. См. memory `white-autoselect-config`.
+- **Маршрутизация 2 уровней:** *по приложениям* (split-tunnel) — на уровне
+  `VpnService.Builder` в `InfinityVpnService.applyPerAppRouting` (allow/disallow),
+  работает для всех движков. *По сайтам* (домены) — правила `routing.rules` в
+  `XrayConfigBuilder.buildRouting`, только Xray (Hy2 доменные правила из UI не
+  применяет). Настройки — в `RoutingSettings` (`appMode`/`apps`/`siteMode`/`sites`).
 - **Премиум/пинг:** премиум — per-key по `host_name`. Пинг — 4 протокола как в Happ
   (Прокси GET/HEAD через ядро, TCP, ICMP) + режим Default/Double/Keepalive + таймаут;
   прокси-пинг поднимает временный инстанс ядра с SOCKS-inbound (`XrayProxyPinger`).

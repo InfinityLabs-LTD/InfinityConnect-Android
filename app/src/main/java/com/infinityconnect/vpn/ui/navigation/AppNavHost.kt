@@ -15,7 +15,9 @@ import com.infinityconnect.vpn.ui.components.FullScreenLoading
 import com.infinityconnect.vpn.ui.components.FullScreenMessage
 import com.infinityconnect.vpn.ui.home.HomeScreen
 import com.infinityconnect.vpn.ui.profile.ProfileScreen
+import com.infinityconnect.vpn.ui.settings.AppPickerScreen
 import com.infinityconnect.vpn.ui.settings.SettingsScreen
+import com.infinityconnect.vpn.ui.settings.SettingsViewModel
 
 /**
  * Корневой навигационный граф. Домен сервера фиксирован, экрана онбординга нет:
@@ -88,7 +90,23 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.SETTINGS) {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenAppPicker = { navController.navigate(Routes.APP_PICKER) },
+            )
+        }
+
+        composable(Routes.APP_PICKER) { entry ->
+            // Общий ViewModel с экраном настроек (scope — backstack-entry SETTINGS),
+            // чтобы выбор приложений и переключатели жили в одном состоянии.
+            val settingsEntry = androidx.compose.runtime.remember(entry) {
+                navController.getBackStackEntry(Routes.SETTINGS)
+            }
+            val vm: SettingsViewModel = hiltViewModel(settingsEntry)
+            AppPickerScreen(
+                viewModel = vm,
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }

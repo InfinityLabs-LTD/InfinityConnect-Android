@@ -7,6 +7,8 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.domain.model.AppResult
+import com.infinityconnect.vpn.domain.model.AppRoutingMode
+import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import com.infinityconnect.vpn.domain.usecase.BuildConnectionUseCase
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +36,7 @@ class InfinityVpnService : VpnService() {
     @Inject lateinit var buildConnection: BuildConnectionUseCase
     @Inject lateinit var engineSelector: EngineSelector
     @Inject lateinit var stateHolder: VpnStateHolder
+    @Inject lateinit var routingRepository: RoutingRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tunInterface: ParcelFileDescriptor? = null
@@ -112,8 +115,16 @@ class InfinityVpnService : VpnService() {
         }
     }
 
-    /** Создаёт TUN-интерфейс с маршрутизацией всего трафика. */
+    /**
+     * Создаёт TUN-интерфейс. Применяет split-tunnel по приложениям
+     * ([AppRoutingMode]) на уровне VpnService.Builder — это работает для всех
+     * движков (Xray/Hysteria2), в отличие от доменных правил (только Xray).
+     */
     private fun establishTun(config: EngineConfig): ParcelFileDescriptor? {
+        val routing = runCatching {
+            kotlinx.coroutines.runBlocking { routingRepository.current() }
+        }.getOrNull()
+
         val builder = Builder()
             .setSession(config.remark)
             .setMtu(MTU)
@@ -121,11 +132,43 @@ class InfinityVpnService : VpnService() {
             .addRoute("0.0.0.0", 0)        // весь IPv4-трафик в туннель
             .addDnsServer(DNS_PRIMARY)
             .addDnsServer(DNS_SECONDARY)
-            // Не заворачиваем собственный трафик приложения (избегаем петли).
-            .apply {
-                runCatching { addDisallowedApplication(packageName) }
-            }
+
+        applyPerAppRouting(builder, routing?.appMode ?: AppRoutingMode.OFF, routing?.apps ?: emptySet())
         return runCatching { builder.establish() }.getOrNull()
+    }
+
+    /**
+     * Настраивает фильтрацию по приложениям на билдере TUN.
+     *  - OFF: весь трафик в VPN, но собственный пакет исключаем (петля);
+     *  - ALLOW: через VPN только выбранные (собственный пакет НЕ добавляем, иначе
+     *    завернём сами себя — он и так не в списке);
+     *  - DISALLOW: через VPN всё, кроме выбранных + собственный пакет.
+     * Несуществующие пакеты (удалённые) молча пропускаем — иначе establish() кинет
+     * PackageManager.NameNotFoundException и туннель не поднимется.
+     */
+    private fun applyPerAppRouting(builder: Builder, mode: AppRoutingMode, apps: Set<String>) {
+        when (mode) {
+            AppRoutingMode.OFF -> {
+                runCatching { builder.addDisallowedApplication(packageName) }
+            }
+            AppRoutingMode.ALLOW -> {
+                var added = 0
+                apps.forEach { pkg ->
+                    if (pkg == packageName) return@forEach // себя в VPN не заворачиваем
+                    if (runCatching { builder.addAllowedApplication(pkg) }.isSuccess) added++
+                }
+                // Пустой allow-список означал бы «ничего в VPN» — бессмысленно.
+                // Тогда откатываемся к поведению OFF (весь трафик, кроме себя).
+                if (added == 0) runCatching { builder.addDisallowedApplication(packageName) }
+            }
+            AppRoutingMode.DISALLOW -> {
+                runCatching { builder.addDisallowedApplication(packageName) }
+                apps.forEach { pkg ->
+                    if (pkg == packageName) return@forEach
+                    runCatching { builder.addDisallowedApplication(pkg) }
+                }
+            }
+        }
     }
 
     /** Периодически опрашивает статистику движка и обновляет состояние/уведомление. */

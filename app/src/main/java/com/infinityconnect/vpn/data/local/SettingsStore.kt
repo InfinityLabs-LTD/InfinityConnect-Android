@@ -10,8 +10,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
+import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -38,18 +40,42 @@ class SettingsStore @Inject constructor(
         prefs[KEY_DISCOVERY]?.let { runCatching { json.decodeFromString<DiscoveryDto>(it) }.getOrNull() }
     }
 
-    /** Настройки маршрутизации (режим + внешние правила). */
+    /** Настройки маршрутизации (режим + внешние правила + per-app + домены). */
     val routing: Flow<RoutingSettings> = context.dataStore.data.map { prefs ->
         RoutingSettings(
             mode = RoutingMode.from(prefs[KEY_ROUTING_MODE]),
             rulesUrl = prefs[KEY_ROUTING_RULES_URL],
             rulesJson = prefs[KEY_ROUTING_RULES_JSON],
             rulesUpdatedAt = prefs[KEY_ROUTING_RULES_AT],
+            appMode = AppRoutingMode.from(prefs[KEY_APP_MODE]),
+            apps = prefs[KEY_APP_LIST]?.split('\n')?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
+            siteMode = SiteRoutingMode.from(prefs[KEY_SITE_MODE]),
+            sites = prefs[KEY_SITE_LIST]?.split('\n')?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
         )
     }
 
     suspend fun setRoutingMode(mode: RoutingMode) {
         context.dataStore.edit { it[KEY_ROUTING_MODE] = mode.name }
+    }
+
+    /** Режим фильтрации по приложениям (OFF/ALLOW/DISALLOW). */
+    suspend fun setAppRoutingMode(mode: AppRoutingMode) {
+        context.dataStore.edit { it[KEY_APP_MODE] = mode.name }
+    }
+
+    /** Набор package-name выбранных приложений (хранится строками через \n). */
+    suspend fun setAppList(packages: Set<String>) {
+        context.dataStore.edit { it[KEY_APP_LIST] = packages.joinToString("\n") }
+    }
+
+    /** Режим маршрутизации по доменам (OFF/PROXY/DIRECT). */
+    suspend fun setSiteRoutingMode(mode: SiteRoutingMode) {
+        context.dataStore.edit { it[KEY_SITE_MODE] = mode.name }
+    }
+
+    /** Список доменов для доменной маршрутизации (хранится строками через \n). */
+    suspend fun setSiteList(domains: List<String>) {
+        context.dataStore.edit { it[KEY_SITE_LIST] = domains.joinToString("\n") }
     }
 
     suspend fun setRoutingRulesUrl(url: String) {
@@ -121,6 +147,10 @@ class SettingsStore @Inject constructor(
         val KEY_ROUTING_RULES_URL = stringPreferencesKey("routing_rules_url")
         val KEY_ROUTING_RULES_JSON = stringPreferencesKey("routing_rules_json")
         val KEY_ROUTING_RULES_AT = longPreferencesKey("routing_rules_at")
+        val KEY_APP_MODE = stringPreferencesKey("app_routing_mode")
+        val KEY_APP_LIST = stringPreferencesKey("app_routing_list")
+        val KEY_SITE_MODE = stringPreferencesKey("site_routing_mode")
+        val KEY_SITE_LIST = stringPreferencesKey("site_routing_list")
         val KEY_PING_METHOD = stringPreferencesKey("ping_method")
         val KEY_PING_MODE = stringPreferencesKey("ping_mode")
         val KEY_PING_URL = stringPreferencesKey("ping_url")

@@ -4,8 +4,10 @@ import com.infinityconnect.vpn.data.local.SettingsStore
 import com.infinityconnect.vpn.data.remote.api.RawApi
 import com.infinityconnect.vpn.domain.model.AppError
 import com.infinityconnect.vpn.domain.model.AppResult
+import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
@@ -27,6 +29,14 @@ class RoutingRepositoryImpl @Inject constructor(
     override suspend fun current(): RoutingSettings = settingsStore.currentRouting()
 
     override suspend fun setMode(mode: RoutingMode) = settingsStore.setRoutingMode(mode)
+
+    override suspend fun setAppMode(mode: AppRoutingMode) = settingsStore.setAppRoutingMode(mode)
+
+    override suspend fun setApps(packages: Set<String>) = settingsStore.setAppList(packages)
+
+    override suspend fun setSiteMode(mode: SiteRoutingMode) = settingsStore.setSiteRoutingMode(mode)
+
+    override suspend fun setSites(domains: List<String>) = settingsStore.setSiteList(domains)
 
     override suspend fun downloadRules(url: String): AppResult<RoutingSettings> {
         val trimmed = url.trim()
