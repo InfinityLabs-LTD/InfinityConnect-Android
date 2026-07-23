@@ -125,8 +125,11 @@ class HomeViewModel @Inject constructor(
             when (val result = syncKeys()) {
                 is AppResult.Success -> {
                     _ui.update { it.copy(refreshing = false, loadingFirstTime = false) }
-                    // Загружаем серверы всех ключей — списки развёрнуты у всех сразу.
-                    loadAllServers(result.data.map { it.id }, force = !initial)
+                    // Загружаем серверы всех ключей — списки развёрнуты у всех
+                    // сразу. Подписки всегда перечитываем с сервера: при старте
+                    // приложения (автообновление) и по кнопке обновления; кэш
+                    // остаётся только офлайн-фолбэком.
+                    loadAllServers(result.data.map { it.id }, force = true)
                 }
                 is AppResult.Failure ->
                     _ui.update {
