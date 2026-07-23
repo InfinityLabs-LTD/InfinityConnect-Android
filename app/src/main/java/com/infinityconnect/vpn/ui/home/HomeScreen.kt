@@ -18,16 +18,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NetworkPing
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,9 +35,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,13 +56,15 @@ import com.infinityconnect.vpn.ui.util.formatDuration
 import com.infinityconnect.vpn.ui.util.formatSpeed
 import com.infinityconnect.vpn.ui.util.isExpired
 import com.infinityconnect.vpn.vpn.TunnelState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onOpenProfile: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onLogout: () -> Unit,
+    onOpenRouting: () -> Unit,
+    onOpenPing: () -> Unit,
+    onOpenAbout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
@@ -95,6 +90,33 @@ fun HomeScreen(
         }
     }
 
+    // Боковое меню в стиле сайдбара Windows-клиента.
+    val drawerState = androidx.compose.material3.rememberDrawerState(
+        androidx.compose.material3.DrawerValue.Closed,
+    )
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun closeThen(action: () -> Unit) {
+        scope.launch {
+            drawerState.close()
+            action()
+        }
+    }
+    androidx.compose.material3.ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppDrawer(
+                items = listOf(
+                    DrawerItem("⚡", "Подключение") { scope.launch { drawerState.close() } },
+                    DrawerItem("🧭", "Маршрутизация") { closeThen(onOpenRouting) },
+                    DrawerItem("📶", "Пинг") { closeThen(onOpenPing) },
+                    DrawerItem("👤", "Профиль") { closeThen(onOpenProfile) },
+                    DrawerItem("ℹ️", "О приложении") { closeThen(onOpenAbout) },
+                ),
+                activeIndex = 0,
+                connected = tunnel is TunnelState.Connected,
+            )
+        },
+    ) {
     Scaffold(
         containerColor = Color.Transparent,
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
@@ -107,15 +129,15 @@ fun HomeScreen(
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Меню")
+                    }
+                },
                 actions = {
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Обновить подписки")
                     }
-                    OverflowMenu(
-                        onProfile = onOpenProfile,
-                        onSettings = onOpenSettings,
-                        onLogout = { viewModel.logout(onLogout) },
-                    )
                 },
             )
         },
@@ -167,6 +189,7 @@ fun HomeScreen(
                 modifier = Modifier.padding(padding),
             )
         }
+    }
     }
 }
 
@@ -511,40 +534,6 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
                 color = InfinityColors.Muted,
             )
         }
-    }
-}
-
-/** Сендвич-меню (⋮/☰): Профиль, Настройки, Выйти. */
-@Composable
-private fun OverflowMenu(
-    onProfile: () -> Unit,
-    onSettings: () -> Unit,
-    onLogout: () -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    IconButton(onClick = { expanded = true }) {
-        Icon(Icons.Filled.Menu, contentDescription = "Меню")
-    }
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = { expanded = false },
-        containerColor = InfinityColors.Surface,
-    ) {
-        DropdownMenuItem(
-            text = { Text("Профиль", color = InfinityColors.OnSurface) },
-            leadingIcon = { Icon(Icons.Filled.Person, null, tint = InfinityColors.Muted) },
-            onClick = { expanded = false; onProfile() },
-        )
-        DropdownMenuItem(
-            text = { Text("Настройки", color = InfinityColors.OnSurface) },
-            leadingIcon = { Icon(Icons.Filled.Settings, null, tint = InfinityColors.Muted) },
-            onClick = { expanded = false; onSettings() },
-        )
-        DropdownMenuItem(
-            text = { Text("Выйти", color = InfinityColors.Coral) },
-            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null, tint = InfinityColors.Coral) },
-            onClick = { expanded = false; onLogout() },
-        )
     }
 }
 

@@ -71,9 +71,10 @@ HomeScreen (кнопка Connect)
 | `MainActivity.kt` | Точка входа Activity, хостит `AppNavHost`. | → navigation |
 | `InfinityApp.kt` (в корне пакета) | `@HiltAndroidApp`-класс приложения. | Hilt-граф |
 | `SplashViewModel.kt` | Стартовый роутинг: discovery → AUTH/HOME/ERROR. | DiscoveryRepository, AuthRepository |
-| `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/SETTINGS). | все экраны |
+| `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/ROUTING/PING/ABOUT; SETTINGS-хаб остаётся, но главная навигация — боковое меню). `sharedSettingsVm` привязывает VM настроек к SETTINGS либо (при прямом переходе из меню) к HOME. | все экраны |
 | `navigation/Routes.kt` | Константы маршрутов. | — |
-| `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). | HomeViewModel |
+| `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). Обёрнут в `ModalNavigationDrawer` — гамбургер открывает боковое меню. | HomeViewModel |
+| `home/AppDrawer.kt` | Боковое меню в стиле сайдбара Windows-клиента: лого, пункты-«пилюли» (активный — акцентный градиент; ⚡ Подключение / 🧭 Маршрутизация / 📶 Пинг / 👤 Профиль / ℹ️ О приложении), статус туннеля внизу. | — |
 | `home/HomeViewModel.kt` | **Ядро UI-логики:** список ключей, выбор сервера, пинг-all, connect/switch/disconnect. | ObserveKeys/SyncKeys/GetServers/PingServer usecase, VpnController, VpnStateHolder, SettingsStore |
 | `home/ConnectHero.kt`, `home/HomeComponents.kt` | Составные Compose-компоненты главного экрана. | — |
 | `auth/AuthScreen.kt` + `AuthViewModel.kt` | Экран входа по логину/паролю. | AuthUseCases |

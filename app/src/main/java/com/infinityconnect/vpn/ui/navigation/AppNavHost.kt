@@ -69,15 +69,11 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.HOME) {
-            val toAuth: () -> Unit = {
-                navController.navigate(Routes.AUTH) {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
             HomeScreen(
                 onOpenProfile = { navController.navigate(Routes.PROFILE) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onLogout = toAuth,
+                onOpenRouting = { navController.navigate(Routes.ROUTING) },
+                onOpenPing = { navController.navigate(Routes.PING) },
+                onOpenAbout = { navController.navigate(Routes.ABOUT) },
             )
         }
 
@@ -133,16 +129,19 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
 /**
  * Возвращает [SettingsViewModel], привязанный к backstack-entry SETTINGS —
  * общий для всех подэкранов настроек (маршрутизация, пинг, выбор приложений).
- * Так их состояние и кэш живут в одном инстансе.
+ * Так их состояние и кэш живут в одном инстансе. Экраны открываются и напрямую
+ * из бокового меню (без хаба SETTINGS в стеке) — тогда VM привязывается к HOME,
+ * который жив всё время сессии, и остаётся общим между подэкранами.
  */
 @Composable
 private fun sharedSettingsVm(
     navController: NavHostController,
     entry: androidx.navigation.NavBackStackEntry,
 ): SettingsViewModel {
-    val settingsEntry = androidx.compose.runtime.remember(entry) {
-        navController.getBackStackEntry(Routes.SETTINGS)
+    val ownerEntry = androidx.compose.runtime.remember(entry) {
+        runCatching { navController.getBackStackEntry(Routes.SETTINGS) }
+            .getOrElse { navController.getBackStackEntry(Routes.HOME) }
     }
-    return hiltViewModel(settingsEntry)
+    return hiltViewModel(ownerEntry)
 }
 
