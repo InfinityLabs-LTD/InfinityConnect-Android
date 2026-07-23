@@ -10,7 +10,7 @@ import retrofit2.http.Url
 
 /**
  * API обновлений Android-клиента (та же система, что у Windows-клиента:
- * /v1/client-updates/*, см. серверный client_updates.py).
+ * `/v1/client-updates/...`, см. серверный client_updates.py).
  *
  * Эндпоинты публичные (без Bearer) — обновление должно быть доступно и до
  * логина. Пути относительные от api_base_url (`.../v1/`), хост подставляет

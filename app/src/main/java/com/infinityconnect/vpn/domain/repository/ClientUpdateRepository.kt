@@ -5,7 +5,7 @@ import com.infinityconnect.vpn.domain.model.ClientUpdate
 import java.io.File
 
 /**
- * Обновления Android-клиента с сервера сервиса (/v1/client-updates/android/*).
+ * Обновления Android-клиента с сервера сервиса (`/v1/client-updates/android/...`).
  * Та же серверная система, что у Windows-клиента (client_updates.py).
  */
 interface ClientUpdateRepository {
