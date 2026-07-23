@@ -75,7 +75,7 @@ HomeScreen (кнопка Connect)
 | `navigation/Routes.kt` | Константы маршрутов. | — |
 | `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). Обёрнут в `ModalNavigationDrawer` — гамбургер открывает боковое меню. | HomeViewModel |
 | `home/AppDrawer.kt` | Боковое меню в стиле сайдбара Windows-клиента: лого, пункты-«пилюли» (активный — акцентный градиент; ⚡ Подключение / 🧭 Маршрутизация / 📶 Пинг / 👤 Профиль / ℹ️ О приложении), статус туннеля внизу. | — |
-| `home/HomeViewModel.kt` | **Ядро UI-логики:** список ключей, выбор сервера, пинг-all, connect/switch/disconnect. | ObserveKeys/SyncKeys/GetServers/PingServer usecase, VpnController, VpnStateHolder, SettingsStore |
+| `home/HomeViewModel.kt` | **Ядро UI-логики:** список ключей, выбор сервера, пинг-all, connect/switch/disconnect. Пинг отменяется при подключении и не запускается при активном туннеле (замеры шли бы через VPN). Фоновая проверка обновления клиента при входе (раз за процесс) → snackbar. | ObserveKeys/SyncKeys/GetServers/PingServer/CheckClientUpdate usecase, VpnController, VpnStateHolder, SettingsStore |
 | `home/ConnectHero.kt`, `home/HomeComponents.kt` | Составные Compose-компоненты главного экрана. | — |
 | `auth/AuthScreen.kt` + `AuthViewModel.kt` | Экран входа по логину/паролю. | AuthUseCases |
 | `profile/ProfileScreen.kt` + `ProfileViewModel.kt` | Аккаунт, подписка, разлогин. | UserRepository, LogoutUseCase |
@@ -83,7 +83,7 @@ HomeScreen (кнопка Connect)
 | `settings/SettingsViewModel.kt` | VM всех экранов настроек (маршрутизация + пинг + список приложений). Общий инстанс для подэкранов через backstack-entry SETTINGS. | SettingsStore, RoutingRepository |
 | `settings/RoutingScreen.kt` | Экран маршрутизации: per-app split-tunnel + домены. Общий режим = ALL (выбор режима и загрузка конфига правил убраны из UI). | SettingsViewModel |
 | `settings/PingScreen.kt` | Экран настроек пинга (протокол/режим/таймаут/URL). | SettingsViewModel |
-| `settings/AboutScreen.kt` | Экран «О приложении» (версия, ядра, разработчик) + карточка «Обновление» (проверить/скачать/установить APK). | BuildConfig/BuildFlags, AboutViewModel |
+| `settings/AboutScreen.kt` | Экран «О приложении» (версия, ядра, разработчик) + карточка «Обновление» (проверить/скачать/установить APK; автопроверка при открытии). | BuildConfig/BuildFlags, AboutViewModel |
 | `settings/AboutViewModel.kt` | VM обновления клиента: check → download (прогресс) → ApkInstaller. | CheckClientUpdate/DownloadClientUpdate usecase |
 | `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app (общий VM через backstack-entry SETTINGS). | SettingsViewModel |
 | `settings/SettingsCommon.kt` | Общие Compose-элементы экранов настроек (SettingsScaffold/SectionTitle/OptionRow/fieldColors). | — |

@@ -39,6 +39,12 @@ fun AboutScreen(
 ) {
     val updateState by viewModel.updateState.collectAsState()
 
+    // Автопроверка при открытии экрана: если фоновая проверка на старте нашла
+    // обновление (или ещё не выполнялась), пользователь сразу видит результат.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (updateState is UpdateUiState.Idle) viewModel.check()
+    }
+
     SettingsScaffold(title = "О приложении", onBack = onBack) {
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.fillMaxWidth()) {

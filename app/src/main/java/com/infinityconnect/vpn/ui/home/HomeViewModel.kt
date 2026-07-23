@@ -59,6 +59,8 @@ data class HomeUiState(
     val error: String? = null,
     /** Одноразовое уведомление (snackbar), напр. «лимит устройств». */
     val notice: String? = null,
+    /** Доступное обновление клиента (фоновая проверка при входе). */
+    val availableUpdate: com.infinityconnect.vpn.domain.model.ClientUpdate? = null,
 )
 
 @HiltViewModel
@@ -71,6 +73,7 @@ class HomeViewModel @Inject constructor(
     private val settingsStore: com.infinityconnect.vpn.data.local.SettingsStore,
     private val logoutUseCase: com.infinityconnect.vpn.domain.usecase.LogoutUseCase,
     private val stateHolder: VpnStateHolder,
+    private val checkClientUpdate: com.infinityconnect.vpn.domain.usecase.CheckClientUpdateUseCase,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(HomeUiState())
@@ -116,7 +119,43 @@ class HomeViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
+        // Останавливаем замер пинга, как только начинается подключение:
+        // измерения конкурируют с туннелем за сеть, а после поднятия VPN
+        // замеры шли бы уже через туннель и были бы бессмысленны.
+        stateHolder.state
+            .onEach { state ->
+                if (state is TunnelState.Connecting || state is TunnelState.Connected) {
+                    cancelPing()
+                }
+            }
+            .launchIn(viewModelScope)
+
         refresh(initial = true)
+        checkUpdateInBackground()
+    }
+
+    /**
+     * Фоновая проверка обновления клиента при входе в приложение — один раз
+     * за жизнь процесса. При наличии обновления показывает snackbar и
+     * помечает состояние (кнопка установки — на экране «О приложении»).
+     */
+    private fun checkUpdateInBackground() {
+        if (updateCheckDone) return
+        updateCheckDone = true
+        viewModelScope.launch {
+            val result = checkClientUpdate()
+            if (result is AppResult.Success) {
+                result.data?.let { update ->
+                    _ui.update {
+                        it.copy(
+                            availableUpdate = update,
+                            notice = "Доступно обновление ${update.version} — см. «О приложении»",
+                        )
+                    }
+                }
+            }
+            // Ошибки проверки молча игнорируем — это фоновая операция.
+        }
     }
 
     fun refresh(initial: Boolean = false) {
@@ -183,6 +222,11 @@ class HomeViewModel @Inject constructor(
     /** Кнопка «Пинг всех» (вверху экрана): перемеряет пинг по ВСЕМ подпискам. */
     fun pingAllSelected() {
         if (_ui.value.pinging) return
+        // Через активный туннель замеры бессмысленны (RTT пошёл бы через VPN).
+        if (isConnectingOrConnected()) {
+            _ui.update { it.copy(notice = "Отключитесь от VPN, чтобы измерить пинг") }
+            return
+        }
         _ui.update { st ->
             st.copy(serversByKey = st.serversByKey.mapValues { (_, list) ->
                 list.map { it.copy(pingMs = null) }
@@ -218,9 +262,25 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Пингует серверы всех ключей и обновляет их по мере готовности. */
+    /** Останавливает текущий замер пинга (перед подключением/переключением). */
+    private fun cancelPing() {
+        if (pingJob?.isActive == true) {
+            pingJob?.cancel()
+            _ui.update { it.copy(pinging = false) }
+        }
+    }
+
+    /**
+     * Пингует серверы всех ключей и обновляет их по мере готовности.
+     * При активном/поднимающемся туннеле авто-пинг не запускается: замеры
+     * пошли бы через VPN и мешали бы самому подключению.
+     */
     private fun pingAllKeys() {
         pingJob?.cancel()
+        if (isConnectingOrConnected()) {
+            _ui.update { it.copy(pinging = false) }
+            return
+        }
         // Плоский список (keyId, server) по всем подпискам. Недоступные ключи
         // (отключена/истекла/лимит) не пингуем — подключение к ним запрещено.
         val blocked = blockedKeyIds()
@@ -281,6 +341,7 @@ class HomeViewModel @Inject constructor(
      * дожидаемся полной остановки и поднимаем новый.
      */
     private fun switchTo(keyId: Long, serverIndex: Int, serverName: String?) {
+        cancelPing()
         switchJob?.cancel()
         switchJob = viewModelScope.launch {
             vpnController.disconnect()
@@ -324,6 +385,8 @@ class HomeViewModel @Inject constructor(
             _ui.update { it.copy(notice = blockedReason(keyId)) }
             return
         }
+        // Прерываем замер пинга: он конкурирует с подключением за сеть.
+        cancelPing()
         vpnController.connect(keyId, _ui.value.selectedServerIndex, _ui.value.selectedServerName)
     }
 
@@ -339,5 +402,12 @@ class HomeViewModel @Inject constructor(
 
         /** Максимум ожидания остановки туннеля при переключении сервера. */
         const val SWITCH_TIMEOUT_MS = 5000L
+
+        /**
+         * Фоновая проверка обновления выполняется один раз за жизнь процесса
+         * (не при каждом пересоздании VM после поворота/возврата на экран).
+         */
+        @Volatile
+        var updateCheckDone = false
     }
 }
