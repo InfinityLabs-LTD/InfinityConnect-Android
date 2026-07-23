@@ -309,7 +309,7 @@ private fun KeyGroup(
                     selected = server.index == selectedServerIndex,
                     pingMethod = pingMethod,
                     isFastest = server.index == fastestIndex,
-                    blocked = key.devicesExhausted,
+                    blocked = key.status(isExpired(key.expiresAt)) != KeyStatus.ACTIVE,
                     onClick = { onSelectServer(key.id, server) },
                 )
             }

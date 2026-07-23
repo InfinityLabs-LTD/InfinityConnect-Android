@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.SubscriptionServer
+import com.infinityconnect.vpn.domain.model.KeyStatus
 import com.infinityconnect.vpn.domain.model.VpnKey
+import com.infinityconnect.vpn.domain.model.status
+import com.infinityconnect.vpn.ui.util.isExpired
 import com.infinityconnect.vpn.domain.usecase.GetSubscriptionServersUseCase
 import com.infinityconnect.vpn.domain.usecase.ObserveKeysUseCase
 import com.infinityconnect.vpn.domain.usecase.PingServerUseCase
@@ -87,7 +90,10 @@ class HomeViewModel @Inject constructor(
         observeKeys()
             .onEach { keys ->
                 val selected = _ui.value.selectedKeyId
-                    ?: keys.firstOrNull { it.isActive && !it.devicesExhausted }?.id
+                    ?: keys.firstOrNull {
+                        it.status(expired = isExpired(it.expiresAt)) ==
+                            KeyStatus.ACTIVE
+                    }?.id
                     ?: keys.firstOrNull()?.id
                 _ui.update { it.copy(keys = keys, selectedKeyId = selected) }
             }
@@ -182,15 +188,38 @@ class HomeViewModel @Inject constructor(
         pingAllKeys()
     }
 
-    /** id ключей с исчерпанным лимитом устройств — их серверы недоступны. */
-    private fun blockedKeyIds(): Set<Long> =
-        _ui.value.keys.filter { it.devicesExhausted }.map { it.id }.toSet()
+    /**
+     * id недоступных ключей: любой статус, кроме ACTIVE (отключена, истекла,
+     * лимит трафика/устройств) — их серверы не пингуем и не подключаем.
+     */
+    private fun blockedKeyIds(): Set<Long> = _ui.value.keys
+        .filter {
+            it.status(expired = isExpired(it.expiresAt)) !=
+                KeyStatus.ACTIVE
+        }
+        .map { it.id }
+        .toSet()
+
+    /** Причина недоступности ключа — текст для snackbar. */
+    private fun blockedReason(keyId: Long): String {
+        val key = _ui.value.keys.firstOrNull { it.id == keyId }
+            ?: return "Подписка недоступна"
+        val status = key.status(expired = isExpired(key.expiresAt))
+        return when (status) {
+            KeyStatus.EXPIRED -> "Срок подписки истёк"
+            KeyStatus.DISABLED -> "Подписка отключена"
+            KeyStatus.LIMITED ->
+                if (key.devicesExhausted) "Достигнут лимит устройств этой подписки"
+                else "Достигнут лимит трафика этой подписки"
+            else -> "Подписка недоступна"
+        }
+    }
 
     /** Пингует серверы всех ключей и обновляет их по мере готовности. */
     private fun pingAllKeys() {
         pingJob?.cancel()
-        // Плоский список (keyId, server) по всем подпискам. Ключи с исчерпанным
-        // лимитом устройств не пингуем — подключение к ним всё равно запрещено.
+        // Плоский список (keyId, server) по всем подпискам. Недоступные ключи
+        // (отключена/истекла/лимит) не пингуем — подключение к ним запрещено.
         val blocked = blockedKeyIds()
         val targets = _ui.value.serversByKey.flatMap { (keyId, list) ->
             if (keyId in blocked) emptyList() else list.map { keyId to it }
@@ -227,9 +256,9 @@ class HomeViewModel @Inject constructor(
      * активное соединение — отключаемся от текущего и подключаемся к новому.
      */
     fun selectServer(keyId: Long, server: SubscriptionServer) {
-        // Лимит устройств исчерпан — подключение к серверам этого ключа запрещено.
+        // Подписка недоступна (отключена/истекла/лимит) — подключение запрещено.
         if (keyId in blockedKeyIds()) {
-            _ui.update { it.copy(notice = "Достигнут лимит устройств этой подписки") }
+            _ui.update { it.copy(notice = blockedReason(keyId)) }
             return
         }
         _ui.update {
@@ -287,9 +316,9 @@ class HomeViewModel @Inject constructor(
 
     fun connect() {
         val keyId = _ui.value.selectedKeyId ?: return
-        // Не подключаем ключ с исчерпанным лимитом устройств.
+        // Не подключаем недоступный ключ (отключена/истекла/лимит).
         if (keyId in blockedKeyIds()) {
-            _ui.update { it.copy(notice = "Достигнут лимит устройств этой подписки") }
+            _ui.update { it.copy(notice = blockedReason(keyId)) }
             return
         }
         vpnController.connect(keyId, _ui.value.selectedServerIndex, _ui.value.selectedServerName)

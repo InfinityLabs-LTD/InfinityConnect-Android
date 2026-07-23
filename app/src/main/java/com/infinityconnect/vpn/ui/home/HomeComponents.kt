@@ -184,8 +184,8 @@ fun ServerRow(
     /** Сервер с наименьшим пингом в подписке — показываем бейдж «Быстрейший». */
     isFastest: Boolean = false,
     /**
-     * Подписка исчерпала лимит устройств: строка приглушена, вместо пинга
-     * пилл «Лимит», тап обрабатывает VM (показывает причину, не подключает).
+     * Подписка недоступна (отключена/истекла/лимит): строка приглушена, вместо
+     * пинга пилл «Недоступно», тап обрабатывает VM (показывает причину).
      */
     blocked: Boolean = false,
 ) {
@@ -223,7 +223,7 @@ fun ServerRow(
             )
         }
         if (blocked) {
-            StatusPill(text = "Лимит", color = InfinityColors.Amber)
+            StatusPill(text = "Недоступно", color = InfinityColors.Amber)
         } else {
             PingLabel(server.pingMs, pingMethod)
         }
