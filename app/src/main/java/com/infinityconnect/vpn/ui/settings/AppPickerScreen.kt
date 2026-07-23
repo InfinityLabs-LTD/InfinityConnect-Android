@@ -52,7 +52,6 @@ fun AppPickerScreen(
 ) {
     val apps by viewModel.apps.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    val gradients = LocalInfinityGradients.current
     var query by remember { mutableStateOf("") }
 
     // Гарантируем загрузку списка при прямом входе на экран.
@@ -66,7 +65,6 @@ fun AppPickerScreen(
 
     Scaffold(
         containerColor = Color.Transparent,
-        modifier = Modifier.background(gradients.screen),
         topBar = {
             TopAppBar(
                 title = { Text("Приложения", fontWeight = FontWeight.Bold) },

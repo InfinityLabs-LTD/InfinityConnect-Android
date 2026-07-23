@@ -46,10 +46,8 @@ internal fun SettingsScaffold(
     onBack: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val gradients = LocalInfinityGradients.current
     Scaffold(
         containerColor = Color.Transparent,
-        modifier = Modifier.background(gradients.screen),
         topBar = {
             TopAppBar(
                 title = { Text(title, fontWeight = FontWeight.Bold) },

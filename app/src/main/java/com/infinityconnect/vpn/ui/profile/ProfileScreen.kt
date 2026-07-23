@@ -68,10 +68,8 @@ fun ProfileScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    val gradients = LocalInfinityGradients.current
     Scaffold(
         containerColor = Color.Transparent,
-        modifier = Modifier.background(gradients.screen),
         topBar = {
             androidx.compose.material3.TopAppBar(
                 title = { Text("Профиль", fontWeight = FontWeight.Bold) },

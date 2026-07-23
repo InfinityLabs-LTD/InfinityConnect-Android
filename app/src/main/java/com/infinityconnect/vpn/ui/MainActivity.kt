@@ -37,7 +37,12 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = com.infinityconnect.vpn.ui.theme.InfinityColors.Space,
                 ) {
-                    AppNavHost()
+                    // Общий анимированный фон (сетка + glow) под всеми экранами —
+                    // экраны держат свои контейнеры прозрачными.
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                        com.infinityconnect.vpn.ui.components.MeshBackground()
+                        AppNavHost()
+                    }
                 }
             }
         }

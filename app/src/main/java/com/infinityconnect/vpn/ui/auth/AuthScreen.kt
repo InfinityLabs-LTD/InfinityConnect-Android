@@ -50,12 +50,10 @@ fun AuthScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val gradients = LocalInfinityGradients.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(gradients.screen)
             .padding(28.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,

@@ -70,7 +70,6 @@ fun HomeScreen(
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val tunnel by viewModel.tunnelState.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
-    val gradients = LocalInfinityGradients.current
 
     // Лаунчер системного разрешения VPN: при успехе — подключаемся.
     val vpnPermissionLauncher = rememberLauncherForActivityResult(
@@ -141,7 +140,6 @@ fun HomeScreen(
                 },
             )
         },
-        modifier = Modifier.background(gradients.screen),
     ) { padding ->
         when {
             ui.loadingFirstTime && ui.keys.isEmpty() ->

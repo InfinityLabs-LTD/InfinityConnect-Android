@@ -43,7 +43,10 @@ android {
             ndk { abiFilters += "x86_64" }
         }
         release {
-            isMinifyEnabled = false
+            // R8: сжатие/обфускация кода и вычистка ресурсов. Нативные ядра
+            // (.so) не трогает — их вес остаётся, но dex/ресурсы ужимаются.
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
