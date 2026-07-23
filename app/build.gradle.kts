@@ -19,6 +19,12 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         vectorDrawables { useSupportLibrary = true }
+
+        // Только 64-бит ARM: нативные ядра (Xray+Hysteria2) весят ~59 МБ на ABI,
+        // а x86/armv7 не нужны реальным телефонам. Режет APK с ~256 до ~80 МБ.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {
@@ -31,6 +37,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // В debug добавляем x86_64: на эмуляторе трансляция arm64 (berberis)
+            // не тянет Go-рантаймы ядер — SIGILL. Релиз остаётся чистым arm64.
+            ndk { abiFilters += "x86_64" }
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
