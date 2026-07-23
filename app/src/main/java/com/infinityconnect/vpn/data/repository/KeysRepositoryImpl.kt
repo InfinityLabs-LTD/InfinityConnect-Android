@@ -38,6 +38,10 @@ class KeysRepositoryImpl @Inject constructor(
     private var diskLoaded = false
 
     override suspend fun sync(): AppResult<List<VpnKey>> {
+        // Мгновенный первый кадр: поднимаем диск-кэш ДО сетевого запроса,
+        // чтобы после пересоздания процесса список ключей не ждал ответ сети
+        // (иначе холодный TLS-handshake даёт 1–3 c «пустого» экрана с лоадером).
+        loadFromDiskInto()
         val result = safeApiCall { api.keys() }
         return when (result) {
             is AppResult.Success -> {
