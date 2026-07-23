@@ -214,6 +214,16 @@ class XrayConfigBuilder @Inject constructor(
             // 2) Пресеты доменной маршрутизации (multi-select). Каждый пресет
             //    несёт своё направление (direct/proxy); RU_BYPASS дополнительно
             //    подхватывает список RU_SERVICES.domains + regexp-зоны.
+            //    Сначала — proxy-исключения direct-пресетов (Сбер/Т-Банк через
+            //    VPN даже при обходе .ru): первое совпавшее правило побеждает.
+            val exceptions = routing.sitePresets.flatMap { it.proxyExceptions }.distinct()
+            if (exceptions.isNotEmpty()) {
+                addJsonObject {
+                    put("type", "field")
+                    put("outboundTag", "proxy")
+                    putJsonArray("domain") { exceptions.forEach { add("domain:$it") } }
+                }
+            }
             routing.sitePresets.forEach { preset ->
                 val domains = when (preset) {
                     SitePreset.RU_BYPASS -> SitePreset.RU_SERVICES.domains

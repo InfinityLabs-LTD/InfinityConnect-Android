@@ -59,6 +59,12 @@ enum class SiteRoutingMode {
     }
 }
 
+/** Сбер и Т-Банк: по требованию — всегда через VPN, даже в direct-пресетах. */
+private val SBER_TBANK = listOf(
+    "sberbank.ru", "sberbank.com", "sber.ru", "sber.com", "sberdevices.ru",
+    "tinkoff.ru", "tbank.ru", "tcsbank.ru",
+)
+
 /**
  * Пресет доменной маршрутизации — готовый набор сайтов с фиксированным
  * направлением (direct = в обход VPN, proxy = через VPN). Пользователь может
@@ -71,6 +77,8 @@ enum class SiteRoutingMode {
  *   ([SiteRoutingMode.DIRECT] или [SiteRoutingMode.PROXY]).
  * @param domains доменные суффиксы (Xray `domain:` — матчит и поддомены).
  * @param regexps regexp-правила Xray (например, все зоны `.ru`).
+ * @param proxyExceptions домены, которые идут через VPN даже если пресет
+ *   направляет остальное напрямую (правило-исключение ставится ВЫШЕ пресета).
  */
 enum class SitePreset(
     val title: String,
@@ -78,6 +86,7 @@ enum class SitePreset(
     val direction: SiteRoutingMode,
     val domains: List<String>,
     val regexps: List<String> = emptyList(),
+    val proxyExceptions: List<String> = emptyList(),
 ) {
     /** Все российские зоны и популярные RU-сервисы — в обход VPN. */
     RU_BYPASS(
@@ -86,6 +95,7 @@ enum class SitePreset(
         direction = SiteRoutingMode.DIRECT,
         domains = emptyList(), // домены берутся из RU_SERVICES + regexp-зон
         regexps = listOf(""".*\.ru$""", """.*\.su$""", """.*\.рф$"""),
+        proxyExceptions = SBER_TBANK,
     ),
 
     /** Российские банки и госсервисы — в обход VPN (антифрод любит RU-IP). */
@@ -93,13 +103,14 @@ enum class SitePreset(
         title = "Банки и Госуслуги — напрямую",
         subtitle = "Банковские приложения и госсервисы часто блокируют зарубежные IP",
         direction = SiteRoutingMode.DIRECT,
+        // Сбер и Т-Банк намеренно не включены — они должны работать через VPN.
         domains = listOf(
-            "sberbank.ru", "sberbank.com", "sber.ru", "online.sberbank.ru",
-            "tinkoff.ru", "tbank.ru", "alfabank.ru", "vtb.ru", "gazprombank.ru",
+            "alfabank.ru", "vtb.ru", "gazprombank.ru",
             "raiffeisen.ru", "psbank.ru", "rshb.ru", "open.ru", "sovcombank.ru",
             "gosuslugi.ru", "nalog.gov.ru", "nalog.ru", "mos.ru", "pfr.gov.ru",
             "sfr.gov.ru", "esia.gosuslugi.ru", "mir-platform.ru", "nspk.ru",
         ),
+        proxyExceptions = SBER_TBANK,
     ),
 
     /** Российские соцсети/почта/маркетплейсы — в обход VPN. */
@@ -125,19 +136,23 @@ enum class SitePreset(
             "youtube.com", "youtu.be", "ytimg.com", "googlevideo.com",
             "ggpht.com", "netflix.com", "nflxvideo.net", "twitch.tv",
             "ttvnw.net", "spotify.com", "scdn.co", "soundcloud.com",
+            "tiktok.com", "tiktokcdn.com", "tiktokv.com", "tiktokcdn-us.com",
+            "ttwstatic.com", "musical.ly", "byteoversea.com",
         ),
     ),
 
     /** Заблокированные в РФ соцсети — принудительно через VPN. */
     SOCIAL_PROXY(
         title = "Соцсети и мессенджеры — через VPN",
-        subtitle = "Instagram, Facebook, X (Twitter), Discord — всегда через VPN",
+        subtitle = "Instagram, Facebook, X (Twitter), Telegram, Discord — всегда через VPN",
         direction = SiteRoutingMode.PROXY,
         domains = listOf(
             "instagram.com", "cdninstagram.com", "facebook.com", "fbcdn.net",
             "twitter.com", "x.com", "twimg.com", "discord.com", "discord.gg",
             "discordapp.com", "discordapp.net", "linkedin.com", "licdn.com",
             "patreon.com", "medium.com",
+            "telegram.org", "telegram.me", "t.me", "telesco.pe", "tdesktop.com",
+            "snapchat.com", "snap.com", "sc-cdn.net", "snapkit.com",
         ),
     );
 
