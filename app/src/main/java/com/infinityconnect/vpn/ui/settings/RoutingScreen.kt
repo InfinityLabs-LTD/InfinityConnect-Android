@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
+import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.ui.components.GlassCard
 import com.infinityconnect.vpn.ui.components.GradientButton
@@ -36,6 +37,7 @@ fun RoutingScreen(
 
     SettingsScaffold(title = "Маршрутизация", onBack = onBack) {
         AppRoutingSection(ui, viewModel, onOpenAppPicker)
+        SitePresetsSection(ui, viewModel)
         SiteRoutingSection(ui, viewModel)
         Spacer(Modifier.height(8.dp))
     }
@@ -72,6 +74,36 @@ private fun AppRoutingSection(ui: SettingsUiState, vm: SettingsViewModel, onOpen
                     text = "Выбрать приложения (${ui.selectedApps.size})",
                     onClick = onOpenAppPicker,
                     modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+// ── Пресеты сайтов ──
+
+/**
+ * Готовые наборы сайтов (multi-select): можно включить несколько пресетов
+ * одновременно, у каждого своё направление (в обход VPN / через VPN).
+ */
+@Composable
+private fun SitePresetsSection(ui: SettingsUiState, vm: SettingsViewModel) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SectionTitle("ПРЕСЕТЫ САЙТОВ")
+            Text(
+                text = "Готовые наборы сайтов — можно включить несколько сразу. " +
+                    "Действуют на VLESS-серверах.",
+                style = MaterialTheme.typography.bodySmall,
+                color = InfinityColors.Muted,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            SitePreset.entries.forEach { preset ->
+                CheckRow(
+                    title = preset.title,
+                    subtitle = preset.subtitle,
+                    checked = preset in ui.sitePresets,
+                    onToggle = { vm.toggleSitePreset(preset) },
                 )
             }
         }

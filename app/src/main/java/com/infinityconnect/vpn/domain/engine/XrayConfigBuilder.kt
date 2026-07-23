@@ -2,6 +2,7 @@ package com.infinityconnect.vpn.domain.engine
 
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -210,7 +211,25 @@ class XrayConfigBuilder @Inject constructor(
                     add("fe80::/10")
                 }
             }
-            // 2) Пользовательские домены (выше режима — имеют приоритет).
+            // 2) Пресеты доменной маршрутизации (multi-select). Каждый пресет
+            //    несёт своё направление (direct/proxy); RU_BYPASS дополнительно
+            //    подхватывает список RU_SERVICES.domains + regexp-зоны.
+            routing.sitePresets.forEach { preset ->
+                val domains = when (preset) {
+                    SitePreset.RU_BYPASS -> SitePreset.RU_SERVICES.domains
+                    else -> preset.domains
+                }
+                if (domains.isEmpty() && preset.regexps.isEmpty()) return@forEach
+                addJsonObject {
+                    put("type", "field")
+                    put("outboundTag", if (preset.direction == SiteRoutingMode.PROXY) "proxy" else "direct")
+                    putJsonArray("domain") {
+                        preset.regexps.forEach { add("regexp:$it") }
+                        domains.forEach { add("domain:$it") }
+                    }
+                }
+            }
+            // 3) Пользовательские домены (выше режима — имеют приоритет).
             //    PROXY: перечисленные домены — через VPN; DIRECT: напрямую.
             //    Правило `domain: "example.com"` матчит и поддомены (Xray-семантика).
             val sites = routing.sites.filter { it.isNotBlank() }

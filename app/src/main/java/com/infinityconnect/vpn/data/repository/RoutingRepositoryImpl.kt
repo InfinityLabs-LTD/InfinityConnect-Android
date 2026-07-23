@@ -7,6 +7,7 @@ import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +38,8 @@ class RoutingRepositoryImpl @Inject constructor(
     override suspend fun setSiteMode(mode: SiteRoutingMode) = settingsStore.setSiteRoutingMode(mode)
 
     override suspend fun setSites(domains: List<String>) = settingsStore.setSiteList(domains)
+
+    override suspend fun setSitePresets(presets: Set<SitePreset>) = settingsStore.setSitePresets(presets)
 
     override suspend fun downloadRules(url: String): AppResult<RoutingSettings> {
         val trimmed = url.trim()

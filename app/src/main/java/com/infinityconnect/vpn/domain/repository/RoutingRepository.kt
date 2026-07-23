@@ -4,6 +4,7 @@ import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import kotlinx.coroutines.flow.Flow
 
@@ -33,6 +34,9 @@ interface RoutingRepository {
 
     /** Список доменов для доменной маршрутизации. */
     suspend fun setSites(domains: List<String>)
+
+    /** Набор включённых пресетов доменной маршрутизации. */
+    suspend fun setSitePresets(presets: Set<SitePreset>)
 
     /**
      * Загружает конфиг правил по [url], валидирует как JSON и сохраняет.

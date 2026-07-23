@@ -12,6 +12,7 @@ import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import com.infinityconnect.vpn.ui.util.toMessage
@@ -51,6 +52,7 @@ data class SettingsUiState(
     // Маршрутизация по сайтам
     val siteMode: SiteRoutingMode = SiteRoutingMode.OFF,
     val sitesText: String = "",
+    val sitePresets: Set<SitePreset> = emptySet(),
     // Пинг
     val pingMethod: PingMethod = PingMethod.TCP,
     val pingMode: PingMode = PingMode.DEFAULT,
@@ -96,6 +98,7 @@ class SettingsViewModel @Inject constructor(
                 selectedApps = s.apps,
                 siteMode = s.siteMode,
                 sitesText = if (sitesEdited) it.sitesText else s.sites.joinToString("\n"),
+                sitePresets = s.sitePresets,
             )
         }
     }
@@ -185,6 +188,15 @@ class SettingsViewModel @Inject constructor(
     fun selectSiteMode(mode: SiteRoutingMode) {
         _ui.update { it.copy(siteMode = mode) }
         viewModelScope.launch { routingRepository.setSiteMode(mode) }
+    }
+
+    /** Переключает пресет доменной маршрутизации (multi-select). */
+    fun toggleSitePreset(preset: SitePreset) {
+        val next = _ui.value.sitePresets.toMutableSet().apply {
+            if (!add(preset)) remove(preset)
+        }
+        _ui.update { it.copy(sitePresets = next) }
+        viewModelScope.launch { routingRepository.setSitePresets(next) }
     }
 
     fun onSitesChange(text: String) {

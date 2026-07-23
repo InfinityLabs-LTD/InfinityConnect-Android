@@ -199,7 +199,10 @@ HomeScreen (кнопка Connect)
   `VpnService.Builder` в `InfinityVpnService.applyPerAppRouting` (allow/disallow),
   работает для всех движков. *По сайтам* (домены) — правила `routing.rules` в
   `XrayConfigBuilder.buildRouting`, только Xray (Hy2 доменные правила из UI не
-  применяет). Настройки — в `RoutingSettings` (`appMode`/`apps`/`siteMode`/`sites`).
+  применяет). Настройки — в `RoutingSettings` (`appMode`/`apps`/`siteMode`/`sites`/`sitePresets`).
+  *Пресеты сайтов* (`SitePreset` в `model/Routing.kt`) — готовые наборы доменов с
+  фиксированным направлением (direct/proxy), multi-select; складываются с ручным
+  списком доменов в `buildRouting`.
 - **Премиум/пинг:** премиум — per-key по `host_name`. Пинг — 4 протокола как в Happ
   (Прокси GET/HEAD через ядро, TCP, ICMP) + режим Default/Double/Keepalive + таймаут;
   прокси-пинг поднимает временный инстанс ядра с SOCKS-inbound (`XrayProxyPinger`).

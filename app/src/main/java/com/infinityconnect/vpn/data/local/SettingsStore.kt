@@ -13,6 +13,7 @@ import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
+import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -51,6 +52,7 @@ class SettingsStore @Inject constructor(
             apps = prefs[KEY_APP_LIST]?.split('\n')?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
             siteMode = SiteRoutingMode.from(prefs[KEY_SITE_MODE]),
             sites = prefs[KEY_SITE_LIST]?.split('\n')?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
+            sitePresets = SitePreset.setFrom(prefs[KEY_SITE_PRESETS]?.split('\n').orEmpty()),
         )
     }
 
@@ -76,6 +78,11 @@ class SettingsStore @Inject constructor(
     /** Список доменов для доменной маршрутизации (хранится строками через \n). */
     suspend fun setSiteList(domains: List<String>) {
         context.dataStore.edit { it[KEY_SITE_LIST] = domains.joinToString("\n") }
+    }
+
+    /** Набор включённых пресетов доменной маршрутизации (имена через \n). */
+    suspend fun setSitePresets(presets: Set<SitePreset>) {
+        context.dataStore.edit { it[KEY_SITE_PRESETS] = presets.joinToString("\n") { p -> p.name } }
     }
 
     suspend fun setRoutingRulesUrl(url: String) {
@@ -160,6 +167,7 @@ class SettingsStore @Inject constructor(
         val KEY_APP_LIST = stringPreferencesKey("app_routing_list")
         val KEY_SITE_MODE = stringPreferencesKey("site_routing_mode")
         val KEY_SITE_LIST = stringPreferencesKey("site_routing_list")
+        val KEY_SITE_PRESETS = stringPreferencesKey("site_routing_presets")
         val KEY_PING_METHOD = stringPreferencesKey("ping_method")
         val KEY_PING_MODE = stringPreferencesKey("ping_mode")
         val KEY_PING_URL = stringPreferencesKey("ping_url")
