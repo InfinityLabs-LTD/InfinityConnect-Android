@@ -25,6 +25,8 @@ data class ProfileUiState(
     val subscription: SubscriptionInfo? = null,
     /** Тариф из активных ключей: «Базовый», «Премиум» или «Базовый + Премиум». */
     val planLabel: String? = null,
+    /** Ключи пользователя — для перечня сроков по каждой подписке. */
+    val keys: List<VpnKey> = emptyList(),
     val supportUrl: String? = null,
     val error: String? = null,
 )
@@ -54,12 +56,14 @@ class ProfileViewModel @Inject constructor(
             val user = (userResult as? AppResult.Success)?.data
             // Кэш ключей мог быть пуст (первый заход в профиль) — подтягиваем.
             if (keysRepository.keys.first().isEmpty()) keysRepository.sync()
+            val keys = keysRepository.keys.first()
             _state.update { current ->
                 current.copy(
                     loading = false,
                     user = user,
                     subscription = (subResult as? AppResult.Success)?.data,
-                    planLabel = planLabel(keysRepository.keys.first(), user),
+                    planLabel = planLabel(keys, user),
+                    keys = keys,
                     error = if (userResult is AppResult.Failure) "Не удалось загрузить профиль" else null,
                 )
             }

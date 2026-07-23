@@ -108,6 +108,7 @@ fun ProfileScreen(
             SubscriptionCard(
                 active = state.user?.isSubscriptionActive == true,
                 expiresAt = state.subscription?.earliestExpiry,
+                keys = state.keys,
                 keysCount = state.subscription?.keysCount,
                 totalMonths = state.subscription?.totalMonths,
                 totalSpent = state.subscription?.totalSpent,
@@ -215,6 +216,7 @@ private fun ProfileHero(user: UserInfo?) {
 private fun SubscriptionCard(
     active: Boolean,
     expiresAt: String?,
+    keys: List<com.infinityconnect.vpn.domain.model.VpnKey>,
     keysCount: Int?,
     totalMonths: Int?,
     totalSpent: Double?,
@@ -276,6 +278,14 @@ private fun SubscriptionCard(
                 )
             }
 
+            // Сроки каждой подписки — не только ближайшей.
+            if (keys.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Divider()
+                Spacer(Modifier.height(4.dp))
+                keys.forEach { key -> KeyExpiryRow(key) }
+            }
+
             Spacer(Modifier.height(16.dp))
             Divider()
             Spacer(Modifier.height(12.dp))
@@ -285,6 +295,51 @@ private fun SubscriptionCard(
                     ?.let { MetricTile("Месяцев", it.toString(), Modifier.weight(1f)) }
                 totalSpent?.takeIf { it > 0 }
                     ?.let { MetricTile("Потрачено", formatMoney(it), Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/** Строка «имя ключа — осталось N дней (до даты)» в карточке подписки. */
+@Composable
+private fun KeyExpiryRow(key: com.infinityconnect.vpn.domain.model.VpnKey) {
+    val remaining = daysUntil(key.expiresAt)
+    val expired = remaining != null && remaining < 0
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (key.isPremium) "👑" else "🌐",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = key.name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = InfinityColors.OnSurface,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = when {
+                    expired || !key.isActive -> "Истекла"
+                    remaining != null -> "$remaining ${plural(remaining, "день", "дня", "дней")}"
+                    else -> "Бессрочно"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = if (expired || !key.isActive) InfinityColors.Coral else InfinityColors.OnSurface,
+            )
+            key.expiresAt?.takeIf { it.isNotBlank() && !expired && key.isActive }?.let {
+                Text(
+                    text = "до ${formatDate(it)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InfinityColors.Muted,
+                )
             }
         }
     }

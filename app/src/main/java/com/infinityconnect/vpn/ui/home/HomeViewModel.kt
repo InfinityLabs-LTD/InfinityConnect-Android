@@ -54,6 +54,8 @@ data class HomeUiState(
     val refreshing: Boolean = false,
     val loadingFirstTime: Boolean = true,
     val error: String? = null,
+    /** Одноразовое уведомление (snackbar), напр. «лимит устройств». */
+    val notice: String? = null,
 )
 
 @HiltViewModel
@@ -85,7 +87,7 @@ class HomeViewModel @Inject constructor(
         observeKeys()
             .onEach { keys ->
                 val selected = _ui.value.selectedKeyId
-                    ?: keys.firstOrNull { it.isActive }?.id
+                    ?: keys.firstOrNull { it.isActive && !it.devicesExhausted }?.id
                     ?: keys.firstOrNull()?.id
                 _ui.update { it.copy(keys = keys, selectedKeyId = selected) }
             }
@@ -180,12 +182,18 @@ class HomeViewModel @Inject constructor(
         pingAllKeys()
     }
 
+    /** id ключей с исчерпанным лимитом устройств — их серверы недоступны. */
+    private fun blockedKeyIds(): Set<Long> =
+        _ui.value.keys.filter { it.devicesExhausted }.map { it.id }.toSet()
+
     /** Пингует серверы всех ключей и обновляет их по мере готовности. */
     private fun pingAllKeys() {
         pingJob?.cancel()
-        // Плоский список (keyId, server) по всем подпискам.
+        // Плоский список (keyId, server) по всем подпискам. Ключи с исчерпанным
+        // лимитом устройств не пингуем — подключение к ним всё равно запрещено.
+        val blocked = blockedKeyIds()
         val targets = _ui.value.serversByKey.flatMap { (keyId, list) ->
-            list.map { keyId to it }
+            if (keyId in blocked) emptyList() else list.map { keyId to it }
         }
         if (targets.isEmpty()) {
             _ui.update { it.copy(pinging = false) }
@@ -219,6 +227,11 @@ class HomeViewModel @Inject constructor(
      * активное соединение — отключаемся от текущего и подключаемся к новому.
      */
     fun selectServer(keyId: Long, server: SubscriptionServer) {
+        // Лимит устройств исчерпан — подключение к серверам этого ключа запрещено.
+        if (keyId in blockedKeyIds()) {
+            _ui.update { it.copy(notice = "Достигнут лимит устройств этой подписки") }
+            return
+        }
         _ui.update {
             it.copy(
                 selectedKeyId = keyId,
@@ -250,6 +263,9 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** Снимает показанное уведомление (после отображения snackbar). */
+    fun noticeShown() = _ui.update { it.copy(notice = null) }
+
     /** Активно ли соединение (подключено/подключается). */
     fun isConnectingOrConnected(): Boolean {
         val s = tunnelState.value
@@ -271,6 +287,11 @@ class HomeViewModel @Inject constructor(
 
     fun connect() {
         val keyId = _ui.value.selectedKeyId ?: return
+        // Не подключаем ключ с исчерпанным лимитом устройств.
+        if (keyId in blockedKeyIds()) {
+            _ui.update { it.copy(notice = "Достигнут лимит устройств этой подписки") }
+            return
+        }
         vpnController.connect(keyId, _ui.value.selectedServerIndex, _ui.value.selectedServerName)
     }
 

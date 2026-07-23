@@ -183,6 +183,11 @@ fun ServerRow(
     modifier: Modifier = Modifier,
     /** Сервер с наименьшим пингом в подписке — показываем бейдж «Быстрейший». */
     isFastest: Boolean = false,
+    /**
+     * Подписка исчерпала лимит устройств: строка приглушена, вместо пинга
+     * пилл «Лимит», тап обрабатывает VM (показывает причину, не подключает).
+     */
+    blocked: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -206,18 +211,22 @@ fun ServerRow(
                     text = server.name,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = InfinityColors.OnSurface,
+                    color = if (blocked) InfinityColors.MutedDim else InfinityColors.OnSurface,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (isFastest) FastestBadge()
+                if (isFastest && !blocked) FastestBadge()
             }
             Text(
                 text = server.meta,
                 style = MaterialTheme.typography.labelMedium,
-                color = InfinityColors.Muted,
+                color = if (blocked) InfinityColors.MutedDim else InfinityColors.Muted,
             )
         }
-        PingLabel(server.pingMs, pingMethod)
+        if (blocked) {
+            StatusPill(text = "Лимит", color = InfinityColors.Amber)
+        } else {
+            PingLabel(server.pingMs, pingMethod)
+        }
     }
 }
 

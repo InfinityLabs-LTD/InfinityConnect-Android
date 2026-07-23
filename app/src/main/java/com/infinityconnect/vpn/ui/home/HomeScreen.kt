@@ -86,8 +86,18 @@ fun HomeScreen(
         }
     }
 
+    // Snackbar одноразовых уведомлений VM (например, «лимит устройств»).
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    androidx.compose.runtime.LaunchedEffect(ui.notice) {
+        ui.notice?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.noticeShown()
+        }
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -299,6 +309,7 @@ private fun KeyGroup(
                     selected = server.index == selectedServerIndex,
                     pingMethod = pingMethod,
                     isFastest = server.index == fastestIndex,
+                    blocked = key.devicesExhausted,
                     onClick = { onSelectServer(key.id, server) },
                 )
             }
