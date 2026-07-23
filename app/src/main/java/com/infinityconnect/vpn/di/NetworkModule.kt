@@ -6,6 +6,7 @@ import com.infinityconnect.vpn.data.remote.AuthInterceptor
 import com.infinityconnect.vpn.data.remote.InfinityApiInterceptor
 import com.infinityconnect.vpn.data.remote.TokenAuthenticator
 import com.infinityconnect.vpn.data.remote.TokenProvider
+import com.infinityconnect.vpn.data.remote.api.ClientUpdateApi
 import com.infinityconnect.vpn.data.remote.api.DiscoveryApi
 import com.infinityconnect.vpn.data.remote.api.InfinityApi
 import com.infinityconnect.vpn.data.remote.api.RawApi
@@ -127,5 +128,25 @@ object NetworkModule {
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
             .create(InfinityApi::class.java)
+    }
+
+    /**
+     * API обновлений клиента. Использует "api"-клиент ради динамического хоста
+     * (InfinityApiInterceptor); эндпоинты публичные — лишний Bearer сервер
+     * игнорирует, а до логина токена просто нет и заголовок не добавляется.
+     */
+    @Provides
+    @Singleton
+    fun provideClientUpdateApi(
+        @Named("api") client: OkHttpClient,
+        json: Json,
+    ): ClientUpdateApi {
+        val contentType = "application/json".toMediaType()
+        return Retrofit.Builder()
+            .baseUrl(PLACEHOLDER_BASE)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory(contentType))
+            .build()
+            .create(ClientUpdateApi::class.java)
     }
 }

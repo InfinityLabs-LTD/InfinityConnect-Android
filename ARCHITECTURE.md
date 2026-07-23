@@ -83,13 +83,15 @@ HomeScreen (кнопка Connect)
 | `settings/SettingsViewModel.kt` | VM всех экранов настроек (маршрутизация + пинг + список приложений). Общий инстанс для подэкранов через backstack-entry SETTINGS. | SettingsStore, RoutingRepository |
 | `settings/RoutingScreen.kt` | Экран маршрутизации: per-app split-tunnel + домены. Общий режим = ALL (выбор режима и загрузка конфига правил убраны из UI). | SettingsViewModel |
 | `settings/PingScreen.kt` | Экран настроек пинга (протокол/режим/таймаут/URL). | SettingsViewModel |
-| `settings/AboutScreen.kt` | Экран «О приложении» (версия, ядра, разработчик). | BuildConfig/BuildFlags |
+| `settings/AboutScreen.kt` | Экран «О приложении» (версия, ядра, разработчик) + карточка «Обновление» (проверить/скачать/установить APK). | BuildConfig/BuildFlags, AboutViewModel |
+| `settings/AboutViewModel.kt` | VM обновления клиента: check → download (прогресс) → ApkInstaller. | CheckClientUpdate/DownloadClientUpdate usecase |
 | `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app (общий VM через backstack-entry SETTINGS). | SettingsViewModel |
 | `settings/SettingsCommon.kt` | Общие Compose-элементы экранов настроек (SettingsScaffold/SectionTitle/OptionRow/fieldColors). | — |
 | `settings/PingMethodUi.kt` | UI-модель метода пинга. | domain.model.PingMethod |
 | `components/Common.kt`, `components/Design.kt` | Переиспользуемые Compose-виджеты. | — |
 | `theme/Theme.kt` | Тема Material. | — |
 | `util/Browser.kt`, `util/Formatters.kt` | Открытие ссылок, форматирование байт/скорости. | — |
+| `util/ApkInstaller.kt` | Запуск системного установщика для скачанного APK (FileProvider `${applicationId}.fileprovider`, cacheDir/updates). | — |
 
 ### `domain/` — бизнес-логика (не знает про Android-фреймворки, кроме мелочей)
 
@@ -100,6 +102,7 @@ HomeScreen (кнопка Connect)
 | `usecase/PingServerUseCase.kt` | Пинг сервера: прокси (GET/HEAD через ядро), TCP, ICMP. | XrayProxyPinger, SettingsStore |
 | `usecase/KeysUseCases.kt` | ObserveKeys / SyncKeys. | KeysRepository |
 | `usecase/AuthUseCases.kt` | Login / Logout. | AuthRepository |
+| `usecase/ClientUpdateUseCases.kt` | CheckClientUpdate / DownloadClientUpdate (самообновление APK). | ClientUpdateRepository |
 | `engine/EngineConfig.kt` | **Контракт профиля сервера** (sealed: `Vless`, `RawXray`, `Hysteria2`) + `Transport`/`Security`. `Transport.Xhttp` несёт сырой `extra` (xmux/xPadding/session/seq/…) — пробрасывается в ядро без интерпретации. | — центральный тип между domain и vpn |
 | `engine/XrayConfigBuilder.kt` | Собирает JSON-конфиг Xray (`build` для Vless, `buildRaw` для RawXray). | EngineConfig, Routing |
 | `subscription/SubscriptionParser.kt` | **Парсер тела подписки** → `List<EngineConfig>` (JSON-массив Xray / base64 / список URI). | VlessUriParser, Hysteria2UriParser, EngineConfig |
@@ -113,6 +116,7 @@ HomeScreen (кнопка Connect)
 | `repository/Repositories.kt` | **Интерфейсы:** Discovery/Auth/User/Keys/Config Repository. | реализации в data/ |
 | `repository/RoutingRepository.kt` | Интерфейс настроек маршрутизации. | RoutingRepositoryImpl |
 | `repository/SubscriptionRepository.kt` | Интерфейс загрузки/кэша подписки. | SubscriptionRepositoryImpl |
+| `repository/ClientUpdateRepository.kt` | Интерфейс обновлений клиента (check/download APK). | ClientUpdateRepositoryImpl |
 
 ### `data/` — реализации и I/O
 
@@ -124,6 +128,7 @@ HomeScreen (кнопка Connect)
 | `remote/api/InfinityApi.kt` | Основной REST-API (auth/keys/config/user). | Retrofit |
 | `remote/api/DiscoveryApi.kt` | Discovery по домену. | — |
 | `remote/api/RawApi.kt` | Сырые GET (тело подписки). | — |
+| `remote/api/ClientUpdateApi.kt` | Обновления клиента: `/v1/client-updates/android/apk/latest` + скачивание APK (публичные, без Bearer). | Retrofit |
 | `remote/dto/*.kt` | DTO ответов (Auth/Config/Discovery/Keys/User). | — |
 | `remote/AuthInterceptor.kt`, `InfinityApiInterceptor.kt` | Заголовки, авторизация запросов. | TokenProvider |
 | `remote/TokenAuthenticator.kt` | Рефреш токена при 401. | TokenStorage |
@@ -203,6 +208,13 @@ HomeScreen (кнопка Connect)
   *Пресеты сайтов* (`SitePreset` в `model/Routing.kt`) — готовые наборы доменов с
   фиксированным направлением (direct/proxy), multi-select; складываются с ручным
   списком доменов в `buildRouting`.
+- **Самообновление (как Windows-клиент):** та же серверная система `/v1/client-updates/*`
+  (client_updates.py в проекте InfinityConnect), платформа `android`, «арка» — `apk`
+  (universal APK). Проверка — `GET android/apk/latest?current={versionName}&code={versionCode}`,
+  сравнение по `version_code`; ответ содержит url/size/sha256. Клиент качает в
+  `cacheDir/updates`, сверяет sha256 и открывает системный установщик через
+  FileProvider (`REQUEST_INSTALL_PACKAGES`). Скачивания считает сервер по
+  `download/{artifact_id}`. Серверная часть — см. `ANDROID_UPDATES_SERVER_PROMPT.md`.
 - **Премиум/пинг:** премиум — per-key по `host_name`. Пинг — 4 протокола как в Happ
   (Прокси GET/HEAD через ядро, TCP, ICMP) + режим Default/Double/Keepalive + таймаут;
   прокси-пинг поднимает временный инстанс ядра с SOCKS-inbound (`XrayProxyPinger`).

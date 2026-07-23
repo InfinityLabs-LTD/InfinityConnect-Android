@@ -1,6 +1,7 @@
 package com.infinityconnect.vpn.di
 
 import com.infinityconnect.vpn.data.repository.AuthRepositoryImpl
+import com.infinityconnect.vpn.data.repository.ClientUpdateRepositoryImpl
 import com.infinityconnect.vpn.data.repository.ConfigRepositoryImpl
 import com.infinityconnect.vpn.data.repository.DiscoveryRepositoryImpl
 import com.infinityconnect.vpn.data.repository.KeysRepositoryImpl
@@ -8,6 +9,7 @@ import com.infinityconnect.vpn.data.repository.RoutingRepositoryImpl
 import com.infinityconnect.vpn.data.repository.SubscriptionRepositoryImpl
 import com.infinityconnect.vpn.data.repository.UserRepositoryImpl
 import com.infinityconnect.vpn.domain.repository.AuthRepository
+import com.infinityconnect.vpn.domain.repository.ClientUpdateRepository
 import com.infinityconnect.vpn.domain.repository.ConfigRepository
 import com.infinityconnect.vpn.domain.repository.DiscoveryRepository
 import com.infinityconnect.vpn.domain.repository.KeysRepository
@@ -52,4 +54,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindRoutingRepository(impl: RoutingRepositoryImpl): RoutingRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindClientUpdateRepository(impl: ClientUpdateRepositoryImpl): ClientUpdateRepository
 }
