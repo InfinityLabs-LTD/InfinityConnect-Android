@@ -16,12 +16,18 @@ import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import com.infinityconnect.vpn.ui.util.toMessage
+import com.infinityconnect.vpn.vpn.TunnelState
+import com.infinityconnect.vpn.vpn.VpnController
+import com.infinityconnect.vpn.vpn.VpnStateHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -64,6 +70,8 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     private val routingRepository: RoutingRepository,
     private val settingsStore: SettingsStore,
+    private val vpnController: VpnController,
+    private val vpnStateHolder: VpnStateHolder,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -77,6 +85,29 @@ class SettingsViewModel @Inject constructor(
     private var rulesUrlEdited = false
     private var pingUrlEdited = false
     private var sitesEdited = false
+    private var restartJob: Job? = null
+
+    /**
+     * Применяет изменённые настройки маршрутизации к активному туннелю:
+     * конфиг ядра/TUN строится только при подключении, поэтому при активном
+     * туннеле переподключаемся к тому же серверу. Дебаунс — пользователь
+     * обычно щёлкает несколько пресетов подряд.
+     */
+    private fun scheduleTunnelRestart() {
+        if (vpnStateHolder.activeConnection.value == null) return
+        if (vpnStateHolder.state.value !is TunnelState.Connected) return
+        restartJob?.cancel()
+        restartJob = viewModelScope.launch {
+            delay(RESTART_DEBOUNCE_MS)
+            // Перечитываем: за время дебаунса туннель могли выключить.
+            val current = vpnStateHolder.activeConnection.value ?: return@launch
+            if (vpnStateHolder.state.value !is TunnelState.Connected) return@launch
+            vpnController.disconnect()
+            vpnStateHolder.state
+                .first { it is TunnelState.Disconnected || it is TunnelState.Error }
+            vpnController.connect(current.keyId, current.serverIndex, current.serverName)
+        }
+    }
 
     init {
         routingRepository.settings
@@ -118,7 +149,7 @@ class SettingsViewModel @Inject constructor(
 
     fun selectMode(mode: RoutingMode) {
         _ui.update { it.copy(mode = mode) }
-        viewModelScope.launch { routingRepository.setMode(mode) }
+        viewModelScope.launch { routingRepository.setMode(mode); scheduleTunnelRestart() }
     }
 
     fun onRulesUrlChange(url: String) {
@@ -148,7 +179,7 @@ class SettingsViewModel @Inject constructor(
 
     fun selectAppMode(mode: AppRoutingMode) {
         _ui.update { it.copy(appMode = mode) }
-        viewModelScope.launch { routingRepository.setAppMode(mode) }
+        viewModelScope.launch { routingRepository.setAppMode(mode); scheduleTunnelRestart() }
         if (mode != AppRoutingMode.OFF) loadApps()
     }
 
@@ -158,7 +189,7 @@ class SettingsViewModel @Inject constructor(
             if (!add(packageName)) remove(packageName)
         }
         _ui.update { it.copy(selectedApps = next) }
-        viewModelScope.launch { routingRepository.setApps(next) }
+        viewModelScope.launch { routingRepository.setApps(next); scheduleTunnelRestart() }
     }
 
     /** Лениво загружает список установленных приложений (тяжёлая операция → IO). */
@@ -187,7 +218,7 @@ class SettingsViewModel @Inject constructor(
 
     fun selectSiteMode(mode: SiteRoutingMode) {
         _ui.update { it.copy(siteMode = mode) }
-        viewModelScope.launch { routingRepository.setSiteMode(mode) }
+        viewModelScope.launch { routingRepository.setSiteMode(mode); scheduleTunnelRestart() }
     }
 
     /** Переключает пресет доменной маршрутизации (multi-select). */
@@ -196,7 +227,7 @@ class SettingsViewModel @Inject constructor(
             if (!add(preset)) remove(preset)
         }
         _ui.update { it.copy(sitePresets = next) }
-        viewModelScope.launch { routingRepository.setSitePresets(next) }
+        viewModelScope.launch { routingRepository.setSitePresets(next); scheduleTunnelRestart() }
     }
 
     fun onSitesChange(text: String) {
@@ -213,7 +244,7 @@ class SettingsViewModel @Inject constructor(
             .distinct()
         sitesEdited = false
         _ui.update { it.copy(sitesText = domains.joinToString("\n")) }
-        viewModelScope.launch { routingRepository.setSites(domains) }
+        viewModelScope.launch { routingRepository.setSites(domains); scheduleTunnelRestart() }
     }
 
     // ── Пинг ──
@@ -250,5 +281,10 @@ class SettingsViewModel @Inject constructor(
         pingUrlEdited = false
         _ui.update { it.copy(pingUrl = url) }
         viewModelScope.launch { settingsStore.setPingUrl(url) }
+    }
+
+    private companion object {
+        /** Пауза перед переподключением после последнего изменения настроек. */
+        const val RESTART_DEBOUNCE_MS = 1500L
     }
 }

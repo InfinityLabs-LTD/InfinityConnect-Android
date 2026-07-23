@@ -77,6 +77,11 @@ class InfinityVpnService : VpnService() {
     private fun startTunnel(keyId: Long, serverIndex: Int, serverName: String?) {
         stateHolder.updateState(TunnelState.Connecting)
         stateHolder.setActiveServer(serverName)
+        // Запоминаем параметры активного подключения — SettingsViewModel по ним
+        // переподключает туннель при изменении настроек маршрутизации.
+        stateHolder.setActiveConnection(
+            VpnStateHolder.ActiveConnection(keyId, serverIndex, serverName),
+        )
         promoteToForeground(serverName ?: "Подключение…", "Устанавливаем соединение")
 
         scope.launch {
@@ -282,6 +287,7 @@ class InfinityVpnService : VpnService() {
         activeEngine = null
         runCatching { tunInterface?.close() }
         tunInterface = null
+        stateHolder.setActiveConnection(null)
         stateHolder.updateState(TunnelState.Error(message))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

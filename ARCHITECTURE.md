@@ -207,7 +207,14 @@ HomeScreen (кнопка Connect)
   применяет). Настройки — в `RoutingSettings` (`appMode`/`apps`/`siteMode`/`sites`/`sitePresets`).
   *Пресеты сайтов* (`SitePreset` в `model/Routing.kt`) — готовые наборы доменов с
   фиксированным направлением (direct/proxy), multi-select; складываются с ручным
-  списком доменов в `buildRouting`.
+  списком доменов в `buildRouting` (приоритет: ручные домены → proxy-исключения →
+  пресеты → общий режим). Для `RawXray`-конфигов клиентские доменные правила
+  подмешиваются ПЕРЕД серверными в `buildRaw`/`mergeClientRulesIntoRaw`:
+  direct → freedom-outbound конфига (добавляется `direct-client`, если нет),
+  proxy → balancerTag первого balancer'а либо тег первого proxy-outbound.
+  Изменение настроек маршрутизации при активном туннеле применяется «на лету»:
+  `SettingsViewModel.scheduleTunnelRestart` (дебаунс 1.5 с) переподключает туннель
+  к тому же серверу через `VpnStateHolder.activeConnection`.
 - **Самообновление (как Windows-клиент):** та же серверная система `/v1/client-updates/*`
   (client_updates.py в проекте InfinityConnect), платформа `android`, «арка» — `apk`
   (universal APK). Проверка — `GET android/apk/latest?current={versionName}&code={versionCode}`,

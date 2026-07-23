@@ -45,16 +45,18 @@ class XrayEngine @Inject constructor(
         config is EngineConfig.Vless || config is EngineConfig.RawXray
 
     override fun start(service: VpnService, config: EngineConfig, tunFd: Int, mtu: Int) {
+        // Актуальные настройки маршрутизации (режим/пресеты/домены) — нужны
+        // обоим путям: Vless применяет их целиком, RawXray — доменные правила.
+        val routing = runBlocking { routingRepository.current() }
         val json = when (config) {
             // Готовый конфиг из подписки (автовыбор/balancer/WHITE) — пробрасываем
-            // целиком; серверный routing важнее пользовательского режима.
+            // целиком; серверный routing важнее пользовательского режима, но
+            // клиентские доменные правила (пресеты/сайты) подмешиваются сверху.
             is EngineConfig.RawXray -> {
-                Log.d(TAG, "Xray raw-config проброшен для ${config.remark}")
-                configBuilder.buildRaw(config, mtu = mtu)
+                Log.d(TAG, "Xray raw-config проброшен для ${config.remark} (presets=${routing.sitePresets.size})")
+                configBuilder.buildRaw(config, mtu = mtu, routing = routing)
             }
             is EngineConfig.Vless -> {
-                // Читаем актуальные настройки маршрутизации (режим + внешние правила).
-                val routing = runBlocking { routingRepository.current() }
                 Log.d(TAG, "Xray config построен для ${config.remark} (routing=${routing.mode})")
                 configBuilder.build(config, mtu = mtu, routing = routing)
             }
