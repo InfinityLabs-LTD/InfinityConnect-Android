@@ -5,13 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.SubscriptionInfo
 import com.infinityconnect.vpn.domain.model.UserInfo
+import com.infinityconnect.vpn.domain.model.VpnKey
 import com.infinityconnect.vpn.domain.repository.DiscoveryRepository
+import com.infinityconnect.vpn.domain.repository.KeysRepository
 import com.infinityconnect.vpn.domain.repository.UserRepository
 import com.infinityconnect.vpn.domain.usecase.LogoutUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -20,6 +23,8 @@ data class ProfileUiState(
     val loading: Boolean = true,
     val user: UserInfo? = null,
     val subscription: SubscriptionInfo? = null,
+    /** Тариф из активных ключей: «Базовый», «Премиум» или «Базовый + Премиум». */
+    val planLabel: String? = null,
     val supportUrl: String? = null,
     val error: String? = null,
 )
@@ -27,6 +32,7 @@ data class ProfileUiState(
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val userRepository: UserRepository,
+    private val keysRepository: KeysRepository,
     private val logoutUseCase: LogoutUseCase,
     discoveryRepository: DiscoveryRepository,
 ) : ViewModel() {
@@ -45,14 +51,35 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             val userResult = userRepository.userInfo()
             val subResult = userRepository.subscriptionInfo()
+            val user = (userResult as? AppResult.Success)?.data
+            // Кэш ключей мог быть пуст (первый заход в профиль) — подтягиваем.
+            if (keysRepository.keys.first().isEmpty()) keysRepository.sync()
             _state.update { current ->
                 current.copy(
                     loading = false,
-                    user = (userResult as? AppResult.Success)?.data,
+                    user = user,
                     subscription = (subResult as? AppResult.Success)?.data,
+                    planLabel = planLabel(keysRepository.keys.first(), user),
                     error = if (userResult is AppResult.Failure) "Не удалось загрузить профиль" else null,
                 )
             }
+        }
+    }
+
+    /**
+     * Тариф по составу ключей: обычные ключи → «Базовый» (все сервера),
+     * премиум-ключи → «Премиум»; есть и те и другие → «Базовый + Премиум».
+     * Ключей в кэше нет — fallback на plan_name от сервера.
+     */
+    private fun planLabel(keys: List<VpnKey>, user: UserInfo?): String? {
+        val active = keys.filter { it.isActive }
+        val hasBase = active.any { !it.isPremium }
+        val hasPremium = active.any { it.isPremium }
+        return when {
+            hasBase && hasPremium -> "Базовый + Премиум"
+            hasPremium -> "Премиум"
+            hasBase -> "Базовый"
+            else -> user?.planName
         }
     }
 

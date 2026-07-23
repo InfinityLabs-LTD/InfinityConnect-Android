@@ -122,7 +122,7 @@ fun ProfileScreen(
                     Divider()
                     InfoRow(Icons.Filled.AlternateEmail, "E-mail", it)
                 }
-                state.user?.planName?.let {
+                state.planLabel?.let {
                     Divider()
                     InfoRow(Icons.Filled.VpnKey, "Тариф", it)
                 }
