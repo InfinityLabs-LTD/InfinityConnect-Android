@@ -68,12 +68,12 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             )
         }
 
-        composable(Routes.HOME) {
+        composable(Routes.HOME) { entry ->
             HomeScreen(
-                onOpenProfile = { navController.navigate(Routes.PROFILE) },
-                onOpenRouting = { navController.navigate(Routes.ROUTING) },
-                onOpenPing = { navController.navigate(Routes.PING) },
-                onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onOpenProfile = { navController.navigateOnce(entry, Routes.PROFILE) },
+                onOpenRouting = { navController.navigateOnce(entry, Routes.ROUTING) },
+                onOpenPing = { navController.navigateOnce(entry, Routes.PING) },
+                onOpenAbout = { navController.navigateOnce(entry, Routes.ABOUT) },
             )
         }
 
@@ -89,12 +89,12 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         }
 
         // Настройки — хаб-меню из отдельных пунктов.
-        composable(Routes.SETTINGS) {
+        composable(Routes.SETTINGS) { entry ->
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                onOpenRouting = { navController.navigate(Routes.ROUTING) },
-                onOpenPing = { navController.navigate(Routes.PING) },
-                onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onOpenRouting = { navController.navigateOnce(entry, Routes.ROUTING) },
+                onOpenPing = { navController.navigateOnce(entry, Routes.PING) },
+                onOpenAbout = { navController.navigateOnce(entry, Routes.ABOUT) },
             )
         }
 
@@ -102,7 +102,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             RoutingScreen(
                 viewModel = sharedSettingsVm(navController, entry),
                 onBack = { navController.popBackStack() },
-                onOpenAppPicker = { navController.navigate(Routes.APP_PICKER) },
+                onOpenAppPicker = { navController.navigateOnce(entry, Routes.APP_PICKER) },
             )
         }
 
@@ -123,6 +123,24 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                 onBack = { navController.popBackStack() },
             )
         }
+    }
+}
+
+/**
+ * Навигация, устойчивая к двойному тапу. Переход выполняется только если экран,
+ * с которого он инициирован, всё ещё на вершине стека (RESUMED). Второй тап
+ * (или тап по пункту меню, пока анимация закрытия ещё идёт) приходит, когда
+ * [from] уже STARTED — и отбрасывается.
+ *
+ * Без этого два быстрых тапа клали в бэкстек два экземпляра одного экрана;
+ * на части устройств композиция при этом схлопывалась в пустой фон.
+ */
+private fun NavHostController.navigateOnce(
+    from: androidx.navigation.NavBackStackEntry,
+    route: String,
+) {
+    if (from.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+        navigate(route)
     }
 }
 

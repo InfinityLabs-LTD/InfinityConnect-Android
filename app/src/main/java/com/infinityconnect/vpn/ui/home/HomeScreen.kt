@@ -94,23 +94,27 @@ fun HomeScreen(
         androidx.compose.material3.DrawerValue.Closed,
     )
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // Навигируем сразу, не дожидаясь анимации закрытия: drawerState.close() —
+    // suspend, и при двойном тапе вторая корутина отменяла первую, из-за чего
+    // переход либо терялся, либо уходил дважды. Дубли отсекает navigateOnce на
+    // уровне навграфа (проверка RESUMED), закрытие меню — просто косметика.
     fun closeThen(action: () -> Unit) {
-        scope.launch {
-            drawerState.close()
-            action()
-        }
+        action()
+        scope.launch { runCatching { drawerState.close() } }
     }
     androidx.compose.material3.ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             AppDrawer(
                 items = listOf(
-                    DrawerItem("⚡", "Подключение") { scope.launch { drawerState.close() } },
+                    DrawerItem("⚡", "Подключение") { closeThen {} },
                     DrawerItem("🧭", "Маршрутизация") { closeThen(onOpenRouting) },
                     DrawerItem("📶", "Пинг") { closeThen(onOpenPing) },
                     DrawerItem("👤", "Профиль") { closeThen(onOpenProfile) },
-                    DrawerItem("ℹ️", "О приложении") { closeThen(onOpenAbout) },
+                    DrawerItem("ℹ", "О приложении") { closeThen(onOpenAbout) },
                 ),
+                // HOME — единственный экран с меню, поэтому активен всегда пункт 0:
+                // остальные пункты открывают экраны поверх, со своим топбаром.
                 activeIndex = 0,
                 connected = tunnel is TunnelState.Connected,
             )
