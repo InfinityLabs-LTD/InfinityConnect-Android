@@ -56,21 +56,32 @@ class InfinityVpnService : VpnService() {
     private var sessionStartMs: Long = 0
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Сервис всегда стартует через startForegroundService(), поэтому промоушен
+        // обязан произойти на ЛЮБОМ пути — включая disconnect и неизвестную
+        // команду. Иначе система убьёт процесс за то, что мы не промоутились
+        // в отведённые ~5 секунд (ForegroundServiceDidNotStartInTimeException).
         when (intent?.action) {
             ACTION_CONNECT -> {
                 val keyId = intent.getLongExtra(EXTRA_KEY_ID, -1)
                 val serverIndex = intent.getIntExtra(EXTRA_SERVER_INDEX, 0)
                 val serverName = intent.getStringExtra(EXTRA_SERVER_NAME)
                 if (keyId <= 0) {
+                    promoteToForeground("Infinity Connect", "Остановка")
                     stopWithError("Некорректный ключ")
                     return START_NOT_STICKY
                 }
                 startTunnel(keyId, serverIndex, serverName)
             }
-            ACTION_DISCONNECT -> stopTunnel()
-            else -> stopTunnel()
+            else -> {
+                // DISCONNECT и всё прочее: промоутимся, чтобы легально
+                // завершиться, и сразу гасим туннель.
+                promoteToForeground("Infinity Connect", "Отключение")
+                stopTunnel()
+            }
         }
-        return START_STICKY
+        // NOT_STICKY: пересоздавать сервис без команды бессмысленно — туннель
+        // всё равно поднимается только по явному ACTION_CONNECT с параметрами.
+        return START_NOT_STICKY
     }
 
     /** Строит профиль и поднимает туннель. */
@@ -82,7 +93,13 @@ class InfinityVpnService : VpnService() {
         stateHolder.setActiveConnection(
             VpnStateHolder.ActiveConnection(keyId, serverIndex, serverName),
         )
-        promoteToForeground(serverName ?: "Подключение…", "Устанавливаем соединение")
+        if (!promoteToForeground(serverName ?: "Подключение…", "Устанавливаем соединение")) {
+            // Система не дала уйти в foreground (фон + Android 12+, либо запрет
+            // вендорской прошивки). Поднимать туннель нельзя: процесс всё равно
+            // будет убит. Сообщаем UI понятной ошибкой вместо тихого краша.
+            stopWithError("Система запретила запуск VPN в фоне. Откройте приложение и повторите.")
+            return
+        }
 
         scope.launch {
             try {
@@ -293,36 +310,65 @@ class InfinityVpnService : VpnService() {
         stopSelf()
     }
 
-    private fun promoteToForeground(title: String, text: String) {
-        VpnNotifications.ensureChannel(this)
-        val notification = VpnNotifications.build(
-            context = this,
-            title = title,
-            text = text,
-            disconnectIntent = disconnectPendingIntent(),
-        )
-        // На Android 10+ указываем тип FGS явно (в манифесте — specialUse).
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            startForeground(
-                VpnNotifications.NOTIFICATION_ID,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+    /**
+     * Переводит сервис в foreground. Возвращает false, если система отказала.
+     *
+     * Вызывать ОБЯЗАТЕЛЬНО на каждом пути обработки команды: сервис стартует
+     * через `startForegroundService()`, и если не промоутиться за ~5 секунд,
+     * система убивает процесс с ForegroundServiceDidNotStartInTimeException.
+     *
+     * Сам вызов тоже может бросить (ForegroundServiceStartNotAllowedException
+     * на Android 12+, если приложение уже в фоне; вендорские прошивки вроде
+     * ColorOS отказывают охотнее стокового Android), поэтому исключения ловим:
+     * упасть здесь — значит убить приложение на глазах пользователя.
+     */
+    private fun promoteToForeground(title: String, text: String): Boolean {
+        return runCatching {
+            VpnNotifications.ensureChannel(this)
+            val notification = VpnNotifications.build(
+                context = this,
+                title = title,
+                text = text,
+                disconnectIntent = disconnectPendingIntent(),
             )
-        } else {
-            startForeground(VpnNotifications.NOTIFICATION_ID, notification)
+            // На Android 10+ тип FGS указывается явно и обязан совпадать с
+            // манифестом. Тип "vpn" (API 36) здесь недоступен: проект собирается
+            // под compileSdk 35, где нет ни атрибута, ни константы, — поэтому
+            // и манифест, и рантайм используют SPECIAL_USE.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                startForeground(
+                    VpnNotifications.NOTIFICATION_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(VpnNotifications.NOTIFICATION_ID, notification)
+            }
+            true
+        }.getOrElse { e ->
+            Log.e(TAG, "startForeground отклонён системой", e)
+            false
         }
     }
 
+    /**
+     * Обновляет текст постоянного уведомления. Косметика: notify() может
+     * бросить при заблокированном канале или отсутствующем разрешении
+     * (частая история на вендорских прошивках), и ронять из-за этого
+     * работающий туннель недопустимо.
+     */
     private fun updateNotification(title: String, text: String) {
-        val notification = VpnNotifications.build(
-            context = this,
-            title = title,
-            text = text,
-            disconnectIntent = disconnectPendingIntent(),
-        )
-        VpnNotifications.ensureChannel(this)
-        getSystemService(android.app.NotificationManager::class.java)
-            .notify(VpnNotifications.NOTIFICATION_ID, notification)
+        runCatching {
+            val notification = VpnNotifications.build(
+                context = this,
+                title = title,
+                text = text,
+                disconnectIntent = disconnectPendingIntent(),
+            )
+            VpnNotifications.ensureChannel(this)
+            getSystemService(android.app.NotificationManager::class.java)
+                ?.notify(VpnNotifications.NOTIFICATION_ID, notification)
+        }.onFailure { Log.w(TAG, "Не удалось обновить уведомление: ${it.message}") }
     }
 
     private fun disconnectPendingIntent(): PendingIntent {

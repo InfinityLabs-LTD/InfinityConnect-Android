@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Foreground-сервис VPN -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+      Тип FGS — specialUse: значение "vpn" для foregroundServiceType появилось
+      только в API 36, а проект компилируется под compileSdk 35 (нет ни атрибута
+      в AAPT, ни константы ServiceInfo). Разрешение ниже ОБЯЗАТЕЛЬНО: без него
+      startForeground с этим типом бросает SecurityException и туннель не встаёт.
+    -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Постоянное уведомление (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
