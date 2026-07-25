@@ -42,9 +42,25 @@
             </intent-filter>
         </activity>
 
-        <!-- VPN-сервис (туннель поверх Xray/Hysteria2). Реализация — на этапе VPN. -->
+        <!--
+            VPN-сервис (туннель поверх Xray/Hysteria2).
+
+            android:process=":vpn" — ОБЯЗАТЕЛЬНО, не оптимизация. Ядра Xray
+            (libv2ray) и Hysteria2 (libhysteria2) — два независимых
+            gomobile/Go-рантайма. Два Go-рантайма не сосуществуют в одном
+            адресном пространстве: каждый процессно перехватывает сигналы
+            (sigaction) и заводит свой TLS, из-за чего cgo-переход одного ядра
+            уходит в чужой рантайм. Итог — падение процесса
+            ("unexpected return pc for runtime.cgocallback" / "unknown caller
+            pc") при запуске ВТОРОГО ядра за жизнь процесса, в любом порядке.
+
+            Отдельный процесс позволяет завершать его при смене движка
+            (InfinityVpnService.stopTunnel → exitProcessIfEngineChanges), не
+            трогая UI: новое ядро всегда стартует в чистом рантайме.
+        -->
         <service
             android:name=".vpn.InfinityVpnService"
+            android:process=":vpn"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:foregroundServiceType="specialUse">

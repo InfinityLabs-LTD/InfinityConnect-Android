@@ -15,11 +15,12 @@ func (f *protectedConnFactory) New(_ net.Addr) (net.PacketConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p := currentProtector(); p != nil {
+	// protectFD зовёт Java-колбэк с отдельной горутины: этот путь начинается
+	// внутри NewTunnel (экспортированной gomobile-функции), а вложенный
+	// cgo-callback оттуда роняет процесс — см. комментарий в direct.go.
+	if currentProtector() != nil {
 		if raw, cErr := conn.SyscallConn(); cErr == nil {
-			_ = raw.Control(func(fd uintptr) {
-				p.Protect(int(fd))
-			})
+			_ = raw.Control(protectFD)
 		}
 	}
 	return conn, nil

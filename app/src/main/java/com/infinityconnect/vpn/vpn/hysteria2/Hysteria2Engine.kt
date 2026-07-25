@@ -77,11 +77,20 @@ class Hysteria2Engine @Inject constructor(
         )
     }
 
-    private companion object {
-        const val TAG = "Hysteria2Engine"
+    companion object {
+        private const val TAG = "Hysteria2Engine"
 
-        // Адрес TUN для системного стека sing-tun: шлюз .1, клиент .2 (согласован
-        // с VpnService.Builder.addAddress("10.10.0.2", 30) в InfinityVpnService).
+        /**
+         * Адрес TUN с префиксом для системного стека sing-tun.
+         *
+         * Стек трактует ПЕРВЫЙ адрес префикса (10.10.0.1) как свой — на нём он
+         * биндит TCP-форвардер, — а следующий (10.10.0.2) как адрес клиента.
+         * Поэтому 10.10.0.1 обязан быть выставлен на интерфейсе: он совпадает с
+         * `TUN_ADDRESS`/`TUN_PREFIX` в
+         * [com.infinityconnect.vpn.vpn.InfinityVpnService]. Разъезд этих значений
+         * даёт "bind: cannot assign requested address" при старте стека.
+         * В префиксе нужно ≥2 адреса, поэтому /30 — минимальный допустимый.
+         */
         const val TUN_CIDR = "10.10.0.1/30"
     }
 }

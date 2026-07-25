@@ -10,6 +10,45 @@ v2 с userspace TCP/IP-стеком [sing-tun](https://github.com/apernet/sing-t
 адрес TUN с префиксом — параметр `tunCidr` в `NewTunnel` (по умолчанию
 `10.10.0.1/30`; в первом префиксе должно быть ≥2 адреса: шлюз + клиент).
 
+## Три инварианта, которые нельзя нарушать
+
+Каждый однажды приводил к падению всего приложения.
+
+**1. Владение TUN-дескриптором.** sing-tun оборачивает переданный fd в
+`os.NewFile` и закрывает его в `tunIf.Close()` — то есть **забирает во владение**.
+Ровно так же ведёт себя libv2ray (Xray). А на стороне Java тем же fd владеет
+`ParcelFileDescriptor` и закрывает его сам. Два владельца одного fd —
+double-close, который `fdsan` в libc Android 12+ считает фатальным и убивает
+процесс.
+
+Поэтому `InfinityVpnService` отдаёт ядру **дубликат**
+(`ParcelFileDescriptor.dup().detachFd()`, метод `dupTunFd`) — единая точка для
+обоих движков; Go-обёртка принимает fd как свой и повторно его не дублирует.
+Kotlin при этом обязан звать `engine.stop()` **до** `tunInterface.close()` —
+иначе ядро останется читать закрытый интерфейс.
+
+**2. Адрес TUN.** Системный стек считает своим **первый адрес префикса**
+(`inet4ServerAddress`) и биндит на него TCP-форвардер, а следующий (`.2`)
+трактует как адрес клиента. Значит `10.10.0.1` из `tunCidr` обязан быть выставлен
+на интерфейсе через `VpnService.Builder.addAddress` — константы
+`InfinityVpnService.TUN_ADDRESS`/`TUN_PREFIX` и `Hysteria2Engine.TUN_CIDR`
+описывают одну и ту же сеть и меняются только вместе. Разъезд даёт
+`start tun stack: listen tcp4 …: bind: cannot assign requested address`.
+
+**3. Java-колбэки только с отдельной горутины.** `Protect`, `OnStatus`,
+`OnShutdown` — это вызовы Java из Go (cgo-callback). Экспортированные
+gomobile-функции (`NewTunnel`) сами вызваны из Java, и их горутина сидит на
+системном стеке cgo-вызова; вложенный колбэк оттуда роняет процесс с
+`unexpected return pc for runtime.cgocallback` / `fatal error: unknown caller pc`.
+Поэтому каждый колбэк уходит через `go func()` + `recover()`: `protectFD`
+(`direct.go`) делает это синхронно — стартует горутину и ждёт её, потому что fd
+обязан быть защищён до использования сокета; `status`/`OnShutdown` — без
+ожидания. Новый Java-колбэк добавлять только по этой схеме.
+
+Ошибки старта стека возвращаются как обычные ошибки (Kotlin показывает их
+пользователю), а `Tunnel.Close()` изолирован `recover()` — паника в Go на
+teardown тоже убила бы процесс целиком.
+
 Собирается в `app/libs/libhysteria2.aar`, который подключается в
 `app/build.gradle.kts`. Java-пакет `hysteria2` (Hysteria2 / Tunnel / Protector /
 TunnelCallbackHandler) вызывается из Kotlin-моста
@@ -24,6 +63,10 @@ TunnelCallbackHandler) вызывается из Kotlin-моста
   hysteria-клиента, TUN-стек sing-tun, форвардинг TCP/UDP через клиент.
 - `connfactory.go` — `ConnFactory`, который защищает UDP-сокет QUIC через
   `Protector` (VpnService.protect), иначе трафик клиента зациклится в TUN.
+- `fd_unix.go` / `fd_other.go` — `closeFD`: закрытие TUN-дескриптора на путях
+  аварийного выхода из `NewTunnel` (владение уже перешло к обёртке, см.
+  инвариант 1). Второй файл — заглушка для не-Unix платформ, чтобы пакет
+  проверялся типами в IDE на Windows.
 - `apply-toolchain-patch.sh` — патч gomobile-тулчейна (см. ниже).
 - `build-aar.sh` — сборка AAR.
 

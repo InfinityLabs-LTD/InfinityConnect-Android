@@ -46,6 +46,17 @@ class InfinityVpnService : VpnService() {
     private var statsJob: Job? = null
 
     /**
+     * Туннель полностью поднят (движок стартовал без ошибок). Отделяет разрыв
+     * рабочего соединения от неудачи самого запуска: колбэк «ядро остановилось»
+     * приходит и в том, и в другом случае, но причину падения на старте
+     * сообщает исключение из `engine.start()`, а не этот колбэк.
+     * @Volatile — читается из колбэка ядра (нативный поток).
+     */
+    @Volatile
+    private var tunnelEstablished = false
+
+
+    /**
      * Колбэк смены нижележащей сети. При Wi-Fi ↔ мобильный система меняет
      * default network — мы сообщаем её туннелю через [setUnderlyingNetworks],
      * чтобы TUN не «завис» на исчезнувшей сети и учёт трафика/энергосбережение
@@ -54,6 +65,17 @@ class InfinityVpnService : VpnService() {
      */
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var sessionStartMs: Long = 0
+
+    override fun onCreate() {
+        super.onCreate()
+        // Сервис живёт в своём процессе (:vpn), поэтому его VpnStateHolder — не
+        // тот же объект, что читает UI. Транслируем каждое изменение броадкастом.
+        stateHolder.onPublish = { state, stats, serverName, connection ->
+            runCatching {
+                VpnStateBridge.publish(this, state, stats, serverName, connection)
+            }
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Сервис всегда стартует через startForegroundService(), поэтому промоушен
@@ -104,6 +126,9 @@ class InfinityVpnService : VpnService() {
         logStore.i(TAG, "Подключение: keyId=$keyId, сервер=${serverName ?: "#$serverIndex"}")
 
         scope.launch {
+            // Объявлен снаружи try: обработчику ошибок нужен протокол, чтобы
+            // назвать в сообщении именно то ядро, которое не запустилось.
+            var startedConfig: EngineConfig? = null
             try {
                 val config = when (val r = buildConnection(keyId, serverIndex)) {
                     is AppResult.Success -> r.data
@@ -112,12 +137,19 @@ class InfinityVpnService : VpnService() {
                         return@launch
                     }
                 }
+                startedConfig = config
 
                 val engine = engineSelector.select(config)
                 logStore.i(
                     TAG,
                     "Профиль готов: ${config.remark}, движок=${engine.javaClass.simpleName}",
                 )
+
+                // Смена ядра в рамках процесса невозможна (два Go-рантайма не
+                // сосуществуют — см. манифест). Перезапускаем процесс сервиса:
+                // система поднимет его заново по этой же команде, и ядро
+                // стартует в чистом рантайме.
+                if (restartIfEngineChanged(engine, keyId, serverIndex, serverName)) return@launch
                 val tun = establishTun(config) ?: run {
                     stopWithError("Не удалось создать TUN-интерфейс")
                     return@launch
@@ -129,7 +161,11 @@ class InfinityVpnService : VpnService() {
                 registerNetworkCallback()
 
                 // Если ядро само остановится (разрыв) — отражаем это в UI.
-                val onCoreStopped = { if (activeEngine != null) stopWithError("Соединение разорвано") }
+                // Реагируем только на разрыв УЖЕ установленного туннеля: во время
+                // start() ядро может дёрнуть shutdown по ошибке запуска, и её
+                // разбирает catch ниже — иначе показали бы «Соединение разорвано»
+                // вместо настоящей причины.
+                val onCoreStopped = { if (tunnelEstablished) stopWithError("Соединение разорвано") }
                 when (engine) {
                     is com.infinityconnect.vpn.vpn.xray.XrayEngine -> engine.onCoreStopped = onCoreStopped
                     is com.infinityconnect.vpn.vpn.hysteria2.Hysteria2Engine -> engine.onCoreStopped = onCoreStopped
@@ -137,9 +173,27 @@ class InfinityVpnService : VpnService() {
 
                 // Запуск движка (блокирующая инициализация).
                 // service = this — ядру нужен VpnService для protect() сокетов.
-                engine.start(this@InfinityVpnService, config, tunFd = tun.fd, mtu = MTU)
+                // activeEngine выставляем ДО start(): если start() бросит на
+                // полпути (часть ресурсов ядра уже поднята), обработчик ошибки
+                // обязан вызвать engine.stop() — иначе они утекут до перезапуска.
                 activeEngine = engine
+                // Ядру отдаём ДУБЛИКАТ дескриптора: и libv2ray, и обёртка
+                // Hysteria2 забирают переданный fd во владение и закрывают его
+                // сами. Оригиналом владеет ParcelFileDescriptor, который тоже
+                // закрывает свой fd — двойное закрытие одного дескриптора ловит
+                // fdsan (Android 12+) и роняет процесс. dup даёт каждой стороне
+                // собственную копию; ядро закрывает её в stop().
+                val engineFd = dupTunFd(tun)
+                try {
+                    engine.start(this@InfinityVpnService, config, tunFd = engineFd, mtu = MTU)
+                } catch (e: Throwable) {
+                    // Ядро не стартовало — владение дубликатом к нему не перешло,
+                    // закрываем сами, иначе fd течёт на каждой неудачной попытке.
+                    runCatching { ParcelFileDescriptor.adoptFd(engineFd).close() }
+                    throw e
+                }
 
+                tunnelEstablished = true
                 sessionStartMs = System.currentTimeMillis()
                 stateHolder.updateState(TunnelState.Connected)
                 updateNotification(config.remark, "Подключено")
@@ -150,14 +204,108 @@ class InfinityVpnService : VpnService() {
                 // NoClassDefFoundError (Error) — его тоже показываем в UI.
                 logStore.e(TAG, "Ошибка запуска туннеля", e)
                 val msg = when (e) {
-                    is NoClassDefFoundError, is UnsatisfiedLinkError ->
-                        "Нативный движок Xray (libv2ray) не подключён. См. README."
+                    is NoClassDefFoundError, is UnsatisfiedLinkError -> {
+                        // Какого именно ядра нет — видно только по конфигу:
+                        // сообщение про Xray при падении Hysteria2 дезориентирует.
+                        val core = if (startedConfig is EngineConfig.Hysteria2) {
+                            "Hysteria2 (libhysteria2)"
+                        } else {
+                            "Xray (libv2ray)"
+                        }
+                        "Нативный движок $core не подключён. См. README."
+                    }
                     else -> e.message ?: "Ошибка подключения"
                 }
                 stopWithError(msg)
             }
         }
     }
+
+    /**
+     * Если в этом процессе уже отработало ДРУГОЕ ядро — перезапускает процесс
+     * сервиса и возвращает true (вызывающий обязан прервать подключение).
+     *
+     * Xray (libv2ray) и Hysteria2 (libhysteria2) — независимые Go-рантаймы;
+     * второй за жизнь процесса падает на первом же cgo-переходе, унося приложение
+     * (см. комментарий к `android:process=":vpn"` в манифесте). Переиспользовать
+     * процесс можно только под то же ядро, поэтому при смене движка глушим
+     * туннель, отправляем себе отложенную команду CONNECT и завершаем процесс:
+     * система поднимет сервис заново, уже с чистым рантаймом.
+     */
+    private fun restartIfEngineChanged(
+        engine: VpnEngine,
+        keyId: Long,
+        serverIndex: Int,
+        serverName: String?,
+    ): Boolean {
+        val previous = loadedEngineClass
+        if (previous == null || previous == engine.javaClass) {
+            loadedEngineClass = engine.javaClass
+            return false
+        }
+
+        logStore.i(
+            TAG,
+            "Смена ядра ${previous.simpleName} → ${engine.javaClass.simpleName}: " +
+                "перезапускаем процесс сервиса",
+        )
+        // Туннель и предыдущее ядро гасим штатно — иначе TUN останется висеть,
+        // а ядро не успеет закрыть свою копию дескриптора.
+        tunnelEstablished = false
+        statsJob?.cancel()
+        statsJob = null
+        unregisterNetworkCallback()
+        runCatching { activeEngine?.stop() }
+        activeEngine = null
+        runCatching { tunInterface?.close() }
+        tunInterface = null
+
+        // Состояние оставляем Connecting: для пользователя это одно непрерывное
+        // подключение, а сервис вот-вот стартует заново и доведёт его до конца.
+        val restart = Intent(this, InfinityVpnService::class.java).apply {
+            action = ACTION_CONNECT
+            putExtra(EXTRA_KEY_ID, keyId)
+            putExtra(EXTRA_SERVER_INDEX, serverIndex)
+            putExtra(EXTRA_SERVER_NAME, serverName)
+        }
+        val pending = PendingIntent.getForegroundService(
+            this,
+            REQUEST_RESTART,
+            restart,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_UPDATE_CURRENT or
+                PendingIntent.FLAG_IMMUTABLE,
+        )
+        // Небольшая задержка: команда должна прийти уже после смерти процесса.
+        runCatching {
+            getSystemService(android.app.AlarmManager::class.java)?.set(
+                android.app.AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + RESTART_DELAY_MS,
+                pending,
+            )
+        }.onFailure { logStore.e(TAG, "Не удалось запланировать перезапуск сервиса", it) }
+
+        logStore.flushBlocking()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        // Только :vpn-процесс — UI в основном процессе не затрагивается.
+        android.os.Process.killProcess(android.os.Process.myPid())
+        return true
+    }
+
+    /**
+     * Возвращает дубликат TUN-дескриптора для передачи в нативное ядро.
+     *
+     * И libv2ray (Xray), и Go-обёртка Hysteria2 забирают переданный fd во
+     * владение и закрывают его при остановке. Оригинал принадлежит
+     * [ParcelFileDescriptor], который закрывает свой fd в [stopTunnel]. Без dup
+     * это двойное закрытие одного дескриптора: `fdsan` в libc Android 12+
+     * считает такое фатальным и убивает процесс целиком.
+     *
+     * Возвращённый fd НЕ нужно закрывать здесь — им владеет ядро. Обёртка
+     * [android.os.ParcelFileDescriptor] вокруг дубликата не создаётся намеренно:
+     * иначе её финализатор закрыл бы fd под работающим ядром.
+     */
+    private fun dupTunFd(tun: ParcelFileDescriptor): Int = tun.dup().detachFd()
 
     /**
      * Создаёт TUN-интерфейс. Применяет split-tunnel по приложениям
@@ -293,9 +441,13 @@ class InfinityVpnService : VpnService() {
     private fun stopTunnel() {
         logStore.i(TAG, "Отключение по команде пользователя")
         stateHolder.updateState(TunnelState.Disconnecting)
+        tunnelEstablished = false
         statsJob?.cancel()
         statsJob = null
         unregisterNetworkCallback()
+        // Порядок обязателен: сначала движок, потом TUN. Ядро держит собственную
+        // (dup) копию TUN-дескриптора и закрывает её в stop(); закрыть свой fd
+        // раньше — значит оставить ядро читать уже закрытый интерфейс.
         runCatching { activeEngine?.stop() }
         activeEngine = null
         runCatching { tunInterface?.close() }
@@ -307,8 +459,10 @@ class InfinityVpnService : VpnService() {
 
     private fun stopWithError(message: String) {
         logStore.e(TAG, "Остановка с ошибкой: $message")
+        tunnelEstablished = false
         statsJob?.cancel()
         unregisterNetworkCallback()
+        // Порядок как в stopTunnel(): движок отпускает свою копию TUN-fd первым.
         runCatching { activeEngine?.stop() }
         activeEngine = null
         runCatching { tunInterface?.close() }
@@ -409,10 +563,41 @@ class InfinityVpnService : VpnService() {
 
         private const val TAG = "InfinityVpnService"
         private const val MTU = 1500
-        private const val TUN_ADDRESS = "10.10.0.2"
+
+        /**
+         * Класс ядра, ЗАГРУЖЕННОГО в текущий процесс. Статическое поле, а не
+         * поле сервиса: сервис пересоздаётся (stopSelf → новый onCreate) внутри
+         * того же процесса, а нативная библиотека остаётся загруженной навсегда.
+         *
+         * Xray (libv2ray) и Hysteria2 (libhysteria2) — независимые Go-рантаймы,
+         * и второй за жизнь процесса роняет его на первом же cgo-переходе
+         * (подробно — в комментарии к `android:process=":vpn"` в манифесте).
+         * Повторный запуск ТОГО ЖЕ ядра безопасен, поэтому храним именно класс.
+         */
+        @Volatile
+        private var loadedEngineClass: Class<out VpnEngine>? = null
+
+        /**
+         * Адрес TUN-интерфейса. Обязан совпадать с ПЕРВЫМ адресом префикса,
+         * который получает системный стек sing-tun в Hysteria2
+         * ([com.infinityconnect.vpn.vpn.hysteria2.Hysteria2Engine.TUN_CIDR]):
+         * стек биндит свой TCP-форвардер именно на него, и если адреса нет на
+         * интерфейсе, старт падает с "bind: cannot assign requested address".
+         * Xray адрес TUN не использует, так что значение общее для обоих движков.
+         */
+        private const val TUN_ADDRESS = "10.10.0.1"
         private const val TUN_PREFIX = 30
         private const val DNS_PRIMARY = "1.1.1.1"
         private const val DNS_SECONDARY = "8.8.8.8"
         private const val STATS_INTERVAL_MS = 1000L
+
+        /** requestCode отложенной команды CONNECT при перезапуске под другое ядро. */
+        private const val REQUEST_RESTART = 1001
+
+        /**
+         * Пауза перед отложенным CONNECT: команда должна прийти уже после того,
+         * как процесс :vpn умер, иначе система доставит её в старый рантайм.
+         */
+        private const val RESTART_DELAY_MS = 600L
     }
 }

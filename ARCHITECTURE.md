@@ -156,7 +156,8 @@ HomeScreen (кнопка Connect)
 | `VpnController.kt` | Фасад для UI: шлёт Intent'ы сервису, `prepareIntent()` разрешения. | InfinityVpnService |
 | `EngineSelector.kt` | Выбор движка по `EngineConfig`: Vless/RawXray→Xray, Hy2→Hysteria2. | XrayEngine, Hysteria2Engine |
 | `VpnEngine.kt` | **Интерфейс движка** (`supports`/`start`/`stop`/`queryStats`). | реализации ниже |
-| `VpnStateHolder.kt` | Singleton-источник состояния/статистики туннеля (StateFlow). | UI, сервис |
+| `VpnStateHolder.kt` | Источник состояния/статистики туннеля (StateFlow). Singleton **на процесс**: в `:vpn` наполняется сервисом, в UI-процессе — из `VpnStateBridge`. | UI, сервис |
+| `VpnStateBridge.kt` | Броадкаст-мост состояния `:vpn` → UI-процесс (снимок целиком, не дельта). Подписка — в `InfinityApp` (только UI-процесс). | VpnStateHolder, InfinityVpnService |
 | `TunnelState.kt` | `TunnelState` (Disconnected/Connecting/Connected/…) + `TunnelStats`. | — |
 | `VpnNotifications.kt` | Канал и построение foreground-уведомления. | — |
 | `xray/XrayEngine.kt` | Движок VLESS/RawXray. | XrayConfigBuilder, XrayCoreBridge, RoutingRepository |
@@ -181,9 +182,41 @@ HomeScreen (кнопка Connect)
 | `connfactory.go` | `protectedConnFactory` — сокеты клиента вне TUN (`VpnService.protect`). |
 | `sni.go` | Сниффинг TLS SNI для доменной маршрутизации. |
 | `rudata.go` | Данные правил маршрутизации (RU-специфика). |
+| `fd_unix.go` / `fd_other.go` | `dupFD`/`closeFD` — дублирование TUN-дескриптора (см. инвариант 1 ниже). |
 
-> ⚠️ См. memory: `hysteria2-routing-status` — маршрутизация hy2 готова; открытый баг:
-> system stack bind 10.10.0.1 + SIGABRT.
+> ⚠️ **Три инварианта Hysteria2** (нарушение любого = падение всего процесса, подробно
+> в [hysteria2-mobile/README.md](hysteria2-mobile/README.md)):
+> 1. **TUN fd отдаётся ядру дубликатом** — `InfinityVpnService.dupTunFd()`
+>    (`ParcelFileDescriptor.dup().detachFd()`), общая точка для ОБОИХ движков:
+>    и libv2ray, и обёртка Hysteria2 забирают переданный fd во владение и закрывают
+>    его сами. Двойное закрытие одного fd ловит `fdsan` (Android 12+) и роняет процесс.
+>    Отсюда порядок в сервисе: `engine.stop()` строго **до** `tunInterface.close()`.
+> 2. **Адрес TUN един:** `InfinityVpnService.TUN_ADDRESS`/`TUN_PREFIX` (`10.10.0.1/30`)
+>    и `Hysteria2Engine.TUN_CIDR` описывают одну сеть и меняются только вместе —
+>    системный стек sing-tun биндит форвардер на первый адрес префикса.
+> 3. **Java-колбэки (`Protect`/`OnStatus`/`OnShutdown`) — только с отдельной горутины**
+>    (`go func()` + `recover()`). Вложенный cgo-callback со стека экспортированной
+>    gomobile-функции даёт `fatal error: unknown caller pc`.
+
+### ⛔ Два Go-ядра не живут в одном процессе
+
+Xray (`libv2ray`) и Hysteria2 (`libhysteria2`) — независимые Go-рантаймы. В одном
+адресном пространстве они несовместимы: каждый процессно перехватывает сигналы
+(`sigaction`) и держит свой TLS, поэтому **второе запущенное за жизнь процесса
+ядро падает** на первом cgo-переходе (`unexpected return pc for
+runtime.cgocallback` / `unknown caller pc` / `gcBgMarkWorker: blackening not
+enabled`) — в любом порядке. Повторный запуск ТОГО ЖЕ ядра безопасен.
+
+Отсюда устройство VPN-слоя:
+
+| Механизм | Где | Зачем |
+|---|---|---|
+| `android:process=":vpn"` | манифест | Сервис в отдельном процессе — его можно убивать, не трогая UI. |
+| `InfinityVpnService.loadedEngineClass` | статическое поле (живёт с процессом) | Помнит, какое ядро уже загружено. |
+| `restartIfEngineChanged()` | `InfinityVpnService` | При смене движка гасит туннель, планирует отложенный `CONNECT` (AlarmManager) и убивает свой процесс — новое ядро стартует в чистом рантайме. |
+| `VpnStateBridge` | `vpn/VpnStateBridge.kt` | Сервис вещает снимок состояния броадкастом, UI-процесс наполняет свой `VpnStateHolder`. Экземпляров holder'а ДВА (по одному на процесс). |
+
+Для пользователя переключение выглядит непрерывным: UI-процесс не перезапускается.
 
 ---
 

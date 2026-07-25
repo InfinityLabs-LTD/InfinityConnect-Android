@@ -19,3 +19,12 @@ local.properties
 
 # Готовые APK — не коммитим (большие бинарники)
 /*.apk
+
+# sources.jar рядом с AAR — тоже артефакт сборки gomobile
+/app/libs/*-sources.jar
+
+# go.sum обёртки Hysteria2 — генерируется build-aar.sh под временные replace
+# (пути к локальным копиям hysteria и патченного x/mobile), у каждой машины свой.
+/hysteria2-mobile/go.sum
+/hysteria2-mobile/go.mod.orig
+/hysteria2-mobile/tools.go

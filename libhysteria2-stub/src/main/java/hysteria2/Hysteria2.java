@@ -23,10 +23,17 @@ public abstract class Hysteria2 {
      * Запускает клиент hysteria2 с JSON-конфигом и TUN-дескриптором.
      *
      * @param configJson конфиг клиента (server/auth/tls/obfs/bandwidth) в JSON.
-     * @param tunFd      файловый дескриптор TUN-интерфейса.
+     * @param tunFd      файловый дескриптор TUN-интерфейса. Обёртка ДУБЛИРУЕТ его
+     *                   (dup) и владеет копией: вызывающая сторона обязана
+     *                   закрыть свой ParcelFileDescriptor сама, но только ПОСЛЕ
+     *                   {@link Tunnel#close()}. Передавать сюда detach-нутый
+     *                   дескриптор не нужно.
      * @param mtu        MTU туннеля.
      * @param tunCidr    адрес TUN с префиксом (например "10.10.0.1/30") — нужен
-     *                   системному стеку sing-tun.
+     *                   системному стеку sing-tun. ПЕРВЫЙ адрес префикса стек
+     *                   считает своим и биндит на него TCP-форвардер, поэтому он
+     *                   обязан быть выставлен на TUN через
+     *                   VpnService.Builder.addAddress.
      * @param handler    обработчик событий клиента.
      * @return запущенный туннель.
      * @throws Exception при ошибке запуска.

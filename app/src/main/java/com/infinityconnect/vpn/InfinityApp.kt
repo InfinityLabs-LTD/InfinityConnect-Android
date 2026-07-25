@@ -13,6 +13,7 @@ import javax.inject.Inject
 class InfinityApp : Application() {
 
     @Inject lateinit var logStore: LogStore
+    @Inject lateinit var vpnStateHolder: com.infinityconnect.vpn.vpn.VpnStateHolder
 
     override fun onCreate() {
         super.onCreate()
@@ -23,6 +24,24 @@ class InfinityApp : Application() {
                 "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
         )
         installCrashHandler()
+
+        // VPN-сервис работает в отдельном процессе (:vpn), и Application.onCreate
+        // выполняется в КАЖДОМ процессе. Подписка на состояние туннеля нужна
+        // только UI-процессу: в процессе сервиса holder заполняется напрямую, а
+        // приёмник лишь ловил бы собственные броадкасты.
+        if (!isVpnProcess()) {
+            com.infinityconnect.vpn.vpn.VpnStateBridge.subscribe(this, vpnStateHolder)
+        }
+    }
+
+    /** true в процессе VPN-сервиса (`:vpn` из манифеста). */
+    private fun isVpnProcess(): Boolean {
+        val current = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            getProcessName()
+        } else {
+            null
+        }
+        return current?.endsWith(VPN_PROCESS_SUFFIX) == true
     }
 
     /**
@@ -48,5 +67,8 @@ class InfinityApp : Application() {
 
     private companion object {
         const val TAG = "App"
+
+        /** Суффикс имени процесса VPN-сервиса (`android:process=":vpn"`). */
+        const val VPN_PROCESS_SUFFIX = ":vpn"
     }
 }

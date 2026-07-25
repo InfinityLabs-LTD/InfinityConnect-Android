@@ -46,6 +46,12 @@ class XrayCoreBridge(
 
     /**
      * Запускает ядро с JSON-конфигом и TUN-дескриптором.
+     *
+     * [tunFd] передаётся ядру ВО ВЛАДЕНИЕ: libv2ray закрывает его сам при
+     * stopLoop(). Поэтому сюда обязан приходить дубликат дескриптора
+     * (`ParcelFileDescriptor.dup().detachFd()`), а не fd, которым ещё владеет
+     * VpnService, — двойное закрытие ловит fdsan и роняет процесс.
+     *
      * @throws Exception при ошибке запуска (перехватывается движком → Error).
      */
     fun start(configJson: String, tunFd: Int) {

@@ -145,8 +145,14 @@ func NewTunnel(configJson string, tunFd int, mtu int, tunCidr string, handler Tu
 	}
 	status(handler, 1, "handshake ok")
 
-	// Единые опции TUN: fd задаётся только здесь (tun.New владеет дескриптором),
-	// stack получает готовый tunIf — иначе double-close fd.
+	// ВАЖНО — владение TUN fd. sing-tun оборачивает переданный дескриптор в
+	// os.NewFile и закрывает его в tunIf.Close(), то есть ЗАБИРАЕТ ЕГО СЕБЕ.
+	// Поэтому вызывающая сторона обязана передавать сюда собственную копию
+	// дескриптора (на Android — ParcelFileDescriptor.dup().detachFd()):
+	// оригиналом владеет VpnService и закрывает его сам, а двойное закрытие
+	// одного fd ловит fdsan в libc Android 12+ и роняет ВЕСЬ процесс по SIGABRT.
+	//
+	// Здесь fd больше не дублируется: владелец ровно один — этот Tunnel.
 	tunOpts := tun.Options{
 		FileDescriptor: tunFd,
 		MTU:            uint32(mtu),
@@ -155,6 +161,7 @@ func NewTunnel(configJson string, tunFd int, mtu int, tunCidr string, handler Tu
 	}
 	tunIf, err := tun.New(tunOpts)
 	if err != nil {
+		_ = closeFD(tunFd)
 		_ = hyClient.Close()
 		return nil, fmt.Errorf("open tun: %w", err)
 	}
@@ -188,9 +195,18 @@ func NewTunnel(configJson string, tunFd int, mtu int, tunCidr string, handler Tu
 	t.tunStack = tunStack
 
 	if err := tunStack.Start(); err != nil {
+		// Системный стек биндит TCP-форвардер на ПЕРВЫЙ адрес префикса
+		// (inet4ServerAddress). Если этого адреса нет на TUN-интерфейсе, bind
+		// падает с "cannot assign requested address" — значит tunCidr на стороне
+		// приложения разошёлся с VpnService.Builder.addAddress. Ошибка обычная,
+		// возвращаемая: процесс ронять нельзя, Kotlin покажет её пользователю.
+		_ = tunStack.Close()
 		_ = tunIf.Close()
 		_ = hyClient.Close()
-		return nil, fmt.Errorf("start tun stack: %w", err)
+		return nil, fmt.Errorf(
+			"start tun stack (tun=%s, форвардер биндится на %s): %w",
+			inet4.String(), inet4.Addr().String(), err,
+		)
 	}
 	status(handler, 1, "tunnel up")
 	return t, nil
@@ -338,22 +354,38 @@ func (t *Tunnel) NewError(_ context.Context, err error) {
 }
 
 // Close stops the tunnel and releases all resources. Idempotent.
+//
+// Паника в любом из Close() внутри Go убила бы весь процесс приложения (Go не
+// разматывает стек через cgo-границу), поэтому каждый шаг изолирован recover'ом.
+// Порядок важен: сначала стек (перестаёт читать TUN), затем сам интерфейс —
+// закрывается ТОЛЬКО dup-копия дескриптора, оригиналом владеет
+// ParcelFileDescriptor на стороне Java.
 func (t *Tunnel) Close() error {
 	t.closeOnce.Do(func() {
-		if t.tunStack != nil {
-			_ = t.tunStack.Close()
-		}
-		if t.tunIf != nil {
-			_ = t.tunIf.Close()
-		}
-		if t.hyClient != nil {
-			_ = t.hyClient.Close()
-		}
+		safeClose(func() error { return t.tunStack.Close() }, t.tunStack != nil)
+		safeClose(func() error { return t.tunIf.Close() }, t.tunIf != nil)
+		safeClose(func() error { return t.hyClient.Close() }, t.hyClient != nil)
 		if t.handler != nil {
-			t.handler.OnShutdown()
+			// Java-колбэк — асинхронно, как и status(): вызывать Java со стека
+			// cgo-callback при teardown чревато "unexpected return pc".
+			h := t.handler
+			go func() {
+				defer func() { _ = recover() }()
+				h.OnShutdown()
+			}()
 		}
 	})
 	return nil
+}
+
+// safeClose выполняет closer, гася панику и ошибку. cond позволяет не вызывать
+// closer на nil-поле, не дублируя проверки в месте вызова.
+func safeClose(closer func() error, cond bool) {
+	if !cond {
+		return
+	}
+	defer func() { _ = recover() }()
+	_ = closer()
 }
 
 // UplinkBytes / DownlinkBytes expose cumulative traffic counters.
