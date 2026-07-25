@@ -186,11 +186,12 @@ HomeScreen (кнопка Connect)
 
 > ⚠️ **Три инварианта Hysteria2** (нарушение любого = падение всего процесса, подробно
 > в [hysteria2-mobile/README.md](hysteria2-mobile/README.md)):
-> 1. **TUN fd отдаётся ядру дубликатом** — `InfinityVpnService.dupTunFd()`
->    (`ParcelFileDescriptor.dup().detachFd()`), общая точка для ОБОИХ движков:
->    и libv2ray, и обёртка Hysteria2 забирают переданный fd во владение и закрывают
->    его сами. Двойное закрытие одного fd ловит `fdsan` (Android 12+) и роняет процесс.
->    Отсюда порядок в сервисе: `engine.stop()` строго **до** `tunInterface.close()`.
+> 1. **Ядру передаётся ОРИГИНАЛЬНЫЙ TUN fd** (`tun.fd`), а дублирует его у себя
+>    Go-обёртка Hysteria2 (`dupFD`), потому что sing-tun этот fd закрывает.
+>    Отдавать движкам копию нельзя: на ней libv2ray не получает обратный трафик
+>    (пакеты уходят, ответы не приходят). Двойное закрытие одного fd ловит `fdsan`
+>    (Android 12+) и роняет процесс, отсюда порядок в сервисе: `engine.stop()`
+>    строго **до** `tunInterface.close()`.
 > 2. **Адрес TUN един:** `InfinityVpnService.TUN_ADDRESS`/`TUN_PREFIX` (`10.10.0.1/30`)
 >    и `Hysteria2Engine.TUN_CIDR` описывают одну сеть и меняются только вместе —
 >    системный стек sing-tun биндит форвардер на первый адрес префикса.

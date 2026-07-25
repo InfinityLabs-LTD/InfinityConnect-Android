@@ -21,9 +21,13 @@ v2 с userspace TCP/IP-стеком [sing-tun](https://github.com/apernet/sing-t
 double-close, который `fdsan` в libc Android 12+ считает фатальным и убивает
 процесс.
 
-Поэтому `InfinityVpnService` отдаёт ядру **дубликат**
-(`ParcelFileDescriptor.dup().detachFd()`, метод `dupTunFd`) — единая точка для
-обоих движков; Go-обёртка принимает fd как свой и повторно его не дублирует.
+Дублировать fd обязан тот, кто его закрывает, — то есть **эта обёртка**
+(`dupFD` в [fd_unix.go](fd_unix.go)). Приложение передаёт в `NewTunnel`
+оригинальный дескриптор `VpnService`, и это не оплошность: на копии
+(`ParcelFileDescriptor.dup()`) libv2ray перестаёт получать обратный трафик —
+пакеты уходят, ответы не приходят, — поэтому в `InfinityVpnService` обоим
+движкам отдаётся именно `tun.fd`.
+
 Kotlin при этом обязан звать `engine.stop()` **до** `tunInterface.close()` —
 иначе ядро останется читать закрытый интерфейс.
 

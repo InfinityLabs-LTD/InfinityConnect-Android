@@ -177,21 +177,15 @@ class InfinityVpnService : VpnService() {
                 // полпути (часть ресурсов ядра уже поднята), обработчик ошибки
                 // обязан вызвать engine.stop() — иначе они утекут до перезапуска.
                 activeEngine = engine
-                // Ядру отдаём ДУБЛИКАТ дескриптора: и libv2ray, и обёртка
-                // Hysteria2 забирают переданный fd во владение и закрывают его
-                // сами. Оригиналом владеет ParcelFileDescriptor, который тоже
-                // закрывает свой fd — двойное закрытие одного дескриптора ловит
-                // fdsan (Android 12+) и роняет процесс. dup даёт каждой стороне
-                // собственную копию; ядро закрывает её в stop().
-                val engineFd = dupTunFd(tun)
-                try {
-                    engine.start(this@InfinityVpnService, config, tunFd = engineFd, mtu = MTU)
-                } catch (e: Throwable) {
-                    // Ядро не стартовало — владение дубликатом к нему не перешло,
-                    // закрываем сами, иначе fd течёт на каждой неудачной попытке.
-                    runCatching { ParcelFileDescriptor.adoptFd(engineFd).close() }
-                    throw e
-                }
+                // Ядру передаётся ОРИГИНАЛЬНЫЙ дескриптор, владельцем остаётся
+                // tunInterface (ParcelFileDescriptor). Передавать сюда дубликат
+                // нельзя: libv2ray читает TUN именно через тот fd, что связан с
+                // интерфейсом VpnService, и на копии трафик в обратную сторону
+                // не идёт (пакеты уходят, ответы не приходят). Двойного закрытия
+                // при этом нет — см. engine.stop() строго перед
+                // tunInterface.close() в stopTunnel(), а Go-обёртка Hysteria2
+                // дублирует fd у себя (dupFD в hysteria2.go).
+                engine.start(this@InfinityVpnService, config, tunFd = tun.fd, mtu = MTU)
 
                 tunnelEstablished = true
                 sessionStartMs = System.currentTimeMillis()
@@ -291,21 +285,6 @@ class InfinityVpnService : VpnService() {
         android.os.Process.killProcess(android.os.Process.myPid())
         return true
     }
-
-    /**
-     * Возвращает дубликат TUN-дескриптора для передачи в нативное ядро.
-     *
-     * И libv2ray (Xray), и Go-обёртка Hysteria2 забирают переданный fd во
-     * владение и закрывают его при остановке. Оригинал принадлежит
-     * [ParcelFileDescriptor], который закрывает свой fd в [stopTunnel]. Без dup
-     * это двойное закрытие одного дескриптора: `fdsan` в libc Android 12+
-     * считает такое фатальным и убивает процесс целиком.
-     *
-     * Возвращённый fd НЕ нужно закрывать здесь — им владеет ядро. Обёртка
-     * [android.os.ParcelFileDescriptor] вокруг дубликата не создаётся намеренно:
-     * иначе её финализатор закрыл бы fd под работающим ядром.
-     */
-    private fun dupTunFd(tun: ParcelFileDescriptor): Int = tun.dup().detachFd()
 
     /**
      * Создаёт TUN-интерфейс. Применяет split-tunnel по приложениям

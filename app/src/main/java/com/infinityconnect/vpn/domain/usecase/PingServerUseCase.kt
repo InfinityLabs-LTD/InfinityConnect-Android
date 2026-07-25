@@ -3,12 +3,17 @@ package com.infinityconnect.vpn.domain.usecase
 import com.infinityconnect.vpn.data.local.SettingsStore
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.SubscriptionServer
+import com.infinityconnect.vpn.domain.model.VpnProtocol
 import com.infinityconnect.vpn.vpn.xray.XrayProxyPinger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketTimeoutException
+import kotlin.random.Random
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,7 +43,7 @@ class PingServerUseCase @Inject constructor(
             when (settings.method) {
                 PingMethod.PROXY_GET -> proxyPing(server, head = false)
                 PingMethod.PROXY_HEAD -> proxyPing(server, head = true)
-                PingMethod.TCP -> tcpPing(server.address, server.port)
+                PingMethod.TCP -> transportPing(server)
                 PingMethod.ICMP -> icmpPing(server.address)
             }
         }
@@ -52,8 +57,71 @@ class PingServerUseCase @Inject constructor(
     private suspend fun proxyPing(server: SubscriptionServer, head: Boolean): Int {
         val s = settingsStore.currentPing()
         val ms = proxyPinger.measure(server.config, s.testUrl, head, s.mode, s.timeoutMs)
-        return if (ms >= 0) ms else tcpPing(server.address, server.port)
+        return if (ms >= 0) ms else transportPing(server)
     }
+
+    /**
+     * Замер по транспорту сервера: TCP-хендшейк или (для Hysteria2) UDP-проба.
+     *
+     * Hysteria2 работает поверх QUIC/UDP — TCP-порта на сервере нет, поэтому
+     * TCP-хендшейк там всегда давал -1 (в списке — прочерк). Разводим по
+     * [SubscriptionServer.protocol].
+     */
+    private fun transportPing(server: SubscriptionServer): Int =
+        if (server.protocol == VpnProtocol.HYSTERIA2) {
+            udpPing(server.address, server.port)
+        } else {
+            tcpPing(server.address, server.port)
+        }
+
+    /**
+     * Задержка до Hysteria2-сервера: UDP-проба (живость) + ICMP (величина).
+     *
+     * У Hysteria2 нет TCP-порта — хендшейк, которым меряются остальные
+     * протоколы, здесь невозможен, и раньше в списке стоял прочерк. Прямой
+     * round-trip по UDP тоже не снять: сервер маскируется и на чужую датаграмму
+     * молча не отвечает, так что «ответ» — это всегда таймаут ожидания, а не
+     * задержка (отсюда были ~1200 мс у живого сервера).
+     *
+     * Поэтому роли разделены:
+     *  - UDP-проба отвечает на вопрос «сервер жив?». Закрытый порт выдаёт себя
+     *    ICMP «port unreachable» → [PortUnreachableException] → -1. Молчание
+     *    означает, что порт открыт и слушается;
+     *  - величину задержки даёт [icmpPing] до того же хоста.
+     *
+     * Если ICMP в сети зарезан (частая история на мобильных операторах), но
+     * сервер жив, отдаём [UDP_ALIVE_FALLBACK_MS]: без этого живой сервер
+     * выглядел бы недоступным.
+     */
+    private fun udpPing(address: String, port: Int): Int {
+        val resolved = runCatching { InetAddress.getByName(address) }.getOrNull() ?: return -1
+        if (!isUdpPortAlive(resolved, port)) return -1
+        val icmp = icmpPing(address)
+        return if (icmp >= 0) icmp else UDP_ALIVE_FALLBACK_MS
+    }
+
+    /**
+     * Жив ли UDP-порт: шлём датаграмму и ждём ICMP-отказа.
+     * true — отказа не было (порт открыт либо фильтруется), false — порт закрыт.
+     */
+    private fun isUdpPortAlive(address: InetAddress, port: Int): Boolean = runCatching {
+        DatagramSocket().use { socket ->
+            // connect() обязателен: только на «подключённом» UDP-сокете Java
+            // доставляет ICMP-ошибку как PortUnreachableException.
+            socket.connect(address, port)
+            socket.soTimeout = UDP_TIMEOUT_MS
+            // Случайные байты: валидный QUIC Initial слать незачем — важен не
+            // ответ, а отсутствие ICMP-отказа.
+            val probe = ByteArray(UDP_PROBE_SIZE).also { bytes -> Random.nextBytes(bytes) }
+            socket.send(DatagramPacket(probe, probe.size))
+            try {
+                socket.receive(DatagramPacket(ByteArray(UDP_RECV_BUFFER), UDP_RECV_BUFFER))
+            } catch (_: SocketTimeoutException) {
+                // Штатное молчание сервера.
+            }
+            true
+        }
+    }.getOrDefault(false)
 
     /**
      * TCP-хендшейк host:port, усреднённый устойчиво к выбросам.
@@ -107,5 +175,22 @@ class PingServerUseCase @Inject constructor(
         const val TCP_WARMUP = 1
         /** Учитываемые хендшейки за замер; из них берём медиану. */
         const val TCP_ATTEMPTS = 4
+
+        /**
+         * Ожидание после UDP-пробы: столько ждём ICMP «port unreachable».
+         * Ответа по существу не будет (сервер молчит намеренно), поэтому время
+         * короткое — оно лишь даёт отказу дойти и не подвешивает список.
+         */
+        const val UDP_TIMEOUT_MS = 700
+        /** Размер пробной датаграммы — как у типичного QUIC Initial. */
+        const val UDP_PROBE_SIZE = 64
+        /** Размер буфера приёма пробы (хватает на любой ICMP-ответ). */
+        const val UDP_RECV_BUFFER = 1500
+        /**
+         * Что показать для живого Hysteria2-сервера, когда ICMP зарезан.
+         * Значение заведомо «среднее»: сказать «сервер доступен» важнее, чем
+         * показать прочерк, но выдавать точную цифру нам неоткуда.
+         */
+        const val UDP_ALIVE_FALLBACK_MS = 999
     }
 }

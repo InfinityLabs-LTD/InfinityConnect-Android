@@ -146,22 +146,29 @@ func NewTunnel(configJson string, tunFd int, mtu int, tunCidr string, handler Tu
 	status(handler, 1, "handshake ok")
 
 	// ВАЖНО — владение TUN fd. sing-tun оборачивает переданный дескриптор в
-	// os.NewFile и закрывает его в tunIf.Close(), то есть ЗАБИРАЕТ ЕГО СЕБЕ.
-	// Поэтому вызывающая сторона обязана передавать сюда собственную копию
-	// дескриптора (на Android — ParcelFileDescriptor.dup().detachFd()):
-	// оригиналом владеет VpnService и закрывает его сам, а двойное закрытие
-	// одного fd ловит fdsan в libc Android 12+ и роняет ВЕСЬ процесс по SIGABRT.
+	// os.NewFile и закрывает его в tunIf.Close(), то есть забирает во владение.
+	// А на стороне Java тем же fd владеет ParcelFileDescriptor (VpnService) и
+	// закрывает его сам: двойное закрытие ловит fdsan в libc Android 12+ и
+	// роняет ВЕСЬ процесс по SIGABRT.
 	//
-	// Здесь fd больше не дублируется: владелец ровно один — этот Tunnel.
+	// Дублируем дескриптор ЗДЕСЬ, а не на стороне Kotlin: ядру нужно отдавать
+	// именно оригинальный fd VpnService (на копии libv2ray не получает обратный
+	// трафик), поэтому копию для себя делает тот, кто её закрывает.
+	dupFd, err := dupFD(tunFd)
+	if err != nil {
+		_ = hyClient.Close()
+		return nil, fmt.Errorf("dup tun fd %d: %w", tunFd, err)
+	}
+
 	tunOpts := tun.Options{
-		FileDescriptor: tunFd,
+		FileDescriptor: dupFd,
 		MTU:            uint32(mtu),
 		Inet4Address:   []netip.Prefix{inet4},
 		Logger:         logger.NOP(),
 	}
 	tunIf, err := tun.New(tunOpts)
 	if err != nil {
-		_ = closeFD(tunFd)
+		_ = closeFD(dupFd)
 		_ = hyClient.Close()
 		return nil, fmt.Errorf("open tun: %w", err)
 	}
@@ -232,7 +239,11 @@ func (t *Tunnel) NewConnection(ctx context.Context, conn net.Conn, m M.Metadata)
 
 	rc, err := t.dial(ctx, dec, reqAddr)
 	if err != nil {
-		return nil // caller ignores the error; just drop the flow
+		// Причину отказа видно только здесь: sing-tun игнорирует возвращённую
+		// ошибку и просто рвёт поток, а снаружи это выглядит как «соединение
+		// установилось, но данные не идут».
+		status(t.handler, 2, "dial "+reqAddr+" failed: "+err.Error())
+		return nil
 	}
 	defer rc.Close()
 
