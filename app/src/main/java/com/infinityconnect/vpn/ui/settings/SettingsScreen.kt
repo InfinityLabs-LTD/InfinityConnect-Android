@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.outlined.Share
@@ -33,6 +34,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenRouting: () -> Unit,
     onOpenPing: () -> Unit,
+    onOpenLogs: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
     SettingsScaffold(title = "Настройки", onBack = onBack) {
@@ -47,6 +49,12 @@ fun SettingsScreen(
             title = "Настройки пинга",
             subtitle = "Протокол, режим, таймаут и URL-тест",
             onClick = onOpenPing,
+        )
+        MenuItem(
+            icon = Icons.AutoMirrored.Filled.List,
+            title = "Логи",
+            subtitle = "Журнал приложения и ядер, отправка в поддержку",
+            onClick = onOpenLogs,
         )
         MenuItem(
             icon = Icons.Filled.Info,

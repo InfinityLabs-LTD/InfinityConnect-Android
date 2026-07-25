@@ -1,7 +1,6 @@
 package com.infinityconnect.vpn.vpn.hysteria2
 
 import android.net.VpnService
-import android.util.Log
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
 import com.infinityconnect.vpn.vpn.TunnelStats
@@ -28,6 +27,7 @@ import javax.inject.Singleton
 class Hysteria2Engine @Inject constructor(
     private val configBuilder: Hysteria2ConfigBuilder,
     private val routingRepository: RoutingRepository,
+    private val logStore: com.infinityconnect.vpn.data.local.LogStore,
 ) : VpnEngine {
 
     @Volatile
@@ -45,10 +45,11 @@ class Hysteria2Engine @Inject constructor(
 
         val routing = runBlocking { routingRepository.current() }
         val json = configBuilder.build(config, routing = routing)
-        Log.d(TAG, "Hysteria2 config построен для ${config.remark} (routing=${routing.mode})")
+        logStore.d(TAG, "Hysteria2 config построен для ${config.remark} (routing=${routing.mode})")
 
         val core = Hysteria2CoreBridge(
             service = service,
+            logStore = logStore,
             onCoreShutdown = { onCoreStopped?.invoke() },
         )
         // Протектор на базе VpnService — через него клиент защищает свой сокет.
@@ -57,7 +58,7 @@ class Hysteria2Engine @Inject constructor(
 
         bridge = core
         running = true
-        Log.i(TAG, "Hysteria2Engine запущен")
+        logStore.i(TAG, "Hysteria2Engine запущен")
     }
 
     override fun stop() {
@@ -65,7 +66,7 @@ class Hysteria2Engine @Inject constructor(
         runCatching { bridge?.stop() }
         bridge = null
         running = false
-        Log.i(TAG, "Hysteria2Engine остановлен")
+        logStore.i(TAG, "Hysteria2Engine остановлен")
     }
 
     override fun queryStats(): TunnelStats? {

@@ -1,7 +1,6 @@
 package com.infinityconnect.vpn.vpn.hysteria2
 
 import android.net.VpnService
-import android.util.Log
 import hysteria2.Hysteria2
 import hysteria2.Protector
 import hysteria2.Tunnel
@@ -19,6 +18,7 @@ import hysteria2.TunnelCallbackHandler
  */
 class Hysteria2CoreBridge(
     private val service: VpnService,
+    private val logStore: com.infinityconnect.vpn.data.local.LogStore,
     private val onCoreShutdown: () -> Unit,
 ) {
     private var tunnel: Tunnel? = null
@@ -31,7 +31,7 @@ class Hysteria2CoreBridge(
     /** Регистрирует протектор в Go-слое. Вызывать до [start]. */
     fun initEnv() {
         Hysteria2.setContext(protector)
-        Log.i(TAG, "Hysteria2 env инициализирован, версия ядра: ${runCatching { Hysteria2.version() }.getOrDefault("?")}")
+        logStore.i(TAG, "Hysteria2 env инициализирован, версия ядра: ${runCatching { Hysteria2.version() }.getOrDefault("?")}")
     }
 
     /**
@@ -49,20 +49,22 @@ class Hysteria2CoreBridge(
             }
 
             override fun onStatus(level: Long, message: String?) {
-                if (!message.isNullOrBlank()) Log.d(TAG, "core status[$level]: $message")
+                // Сообщения самого ядра — причины отказа QUIC-хендшейка видны
+                // только здесь, поэтому пишем их в постоянный журнал.
+                if (!message.isNullOrBlank()) logStore.d(TAG, "core[$level]: $message")
             }
         }
         tunnel = Hysteria2.newTunnel(configJson, tunFd.toLong(), mtu.toLong(), tunCidr, handler)
-        Log.i(TAG, "Hysteria2-клиент запущен (tunFd=$tunFd, mtu=$mtu, tun=$tunCidr)")
+        logStore.i(TAG, "Hysteria2-клиент запущен (tunFd=$tunFd, mtu=$mtu, tun=$tunCidr)")
     }
 
     /** Останавливает клиент. Идемпотентно. */
     fun stop() {
         val t = tunnel ?: return
         runCatching { t.close() }
-            .onFailure { Log.w(TAG, "Ошибка остановки клиента: ${it.message}") }
+            .onFailure { logStore.w(TAG, "Ошибка остановки клиента: ${it.message}") }
         tunnel = null
-        Log.i(TAG, "Hysteria2-клиент остановлен")
+        logStore.i(TAG, "Hysteria2-клиент остановлен")
     }
 
     /** Суммарный трафик (uplink, downlink) в байтах, либо null. */

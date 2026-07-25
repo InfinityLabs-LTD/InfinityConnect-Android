@@ -71,7 +71,7 @@ HomeScreen (кнопка Connect)
 | `MainActivity.kt` | Точка входа Activity, хостит `AppNavHost`. | → navigation |
 | `InfinityApp.kt` (в корне пакета) | `@HiltAndroidApp`-класс приложения. | Hilt-граф |
 | `SplashViewModel.kt` | Стартовый роутинг: discovery → AUTH/HOME/ERROR. | DiscoveryRepository, AuthRepository |
-| `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/ROUTING/PING/ABOUT; SETTINGS-хаб остаётся, но главная навигация — боковое меню). `sharedSettingsVm` привязывает VM настроек к SETTINGS либо (при прямом переходе из меню) к HOME. | все экраны |
+| `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/ROUTING/PING/LOGS/ABOUT; SETTINGS-хаб остаётся, но главная навигация — боковое меню). `sharedSettingsVm` привязывает VM настроек к SETTINGS либо (при прямом переходе из меню) к HOME. | все экраны |
 | `navigation/Routes.kt` | Константы маршрутов. | — |
 | `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). Обёрнут в `ModalNavigationDrawer` — гамбургер открывает боковое меню. | HomeViewModel |
 | `home/AppDrawer.kt` | Боковое меню в стиле сайдбара Windows-клиента: лого, пункты-«пилюли» (активный — акцентный градиент; ⚡ Подключение / 🧭 Маршрутизация / 📶 Пинг / 👤 Профиль / ℹ️ О приложении), статус туннеля внизу. | — |
@@ -83,6 +83,7 @@ HomeScreen (кнопка Connect)
 | `settings/SettingsViewModel.kt` | VM всех экранов настроек (маршрутизация + пинг + список приложений). Общий инстанс для подэкранов через backstack-entry SETTINGS. | SettingsStore, RoutingRepository |
 | `settings/RoutingScreen.kt` | Экран маршрутизации: per-app split-tunnel + домены. Общий режим = ALL (выбор режима и загрузка конфига правил убраны из UI). | SettingsViewModel |
 | `settings/PingScreen.kt` | Экран настроек пинга (протокол/режим/таймаут/URL). | SettingsViewModel |
+| `settings/LogsScreen.kt` + `LogsViewModel.kt` | Экран «Логи»: журнал приложения, VPN-сервиса и ядер (включая записи прошлых сессий и крашей), фильтр по уровню, автопрокрутка, очистка и отправка файлом через FileProvider (`cacheDir/logs`). | LogStore |
 | `settings/AboutScreen.kt` | Экран «О приложении» (версия, ядра, разработчик) + карточка «Обновление» (проверить/скачать/установить APK; автопроверка при открытии). | BuildConfig/BuildFlags, AboutViewModel |
 | `settings/AboutViewModel.kt` | VM обновления клиента: check → download (прогресс) → ApkInstaller. | CheckClientUpdate/DownloadClientUpdate usecase |
 | `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app (общий VM через backstack-entry SETTINGS). | SettingsViewModel |
@@ -135,6 +136,7 @@ HomeScreen (кнопка Connect)
 | `remote/TokenProvider.kt`, `ApiBaseUrlProvider.kt` | Токен и базовый URL (из discovery). | — |
 | `local/SettingsStore.kt` | DataStore настроек (метод пинга и др.) + **последний выбранный сервер** (`last_key_id`/`last_server_index`/`last_server_name`) для восстановления выбора при следующем запуске. | — читается в HomeVM/SettingsVM |
 | `local/SubscriptionCacheStore.kt` | **Офлайн-кэш тел подписок на диске.** | SubscriptionRepositoryImpl |
+| `local/LogStore.kt` | **Постоянный журнал** приложения и ядер: очередь → файлы `filesDir/logs` (`current.log` + ротация в `prev.log`, ~2 МБ), запись пачками с `flush`+`fd.sync` — переживает краш и убийство процесса. Хвост в памяти отдаётся экрану логов; `flushBlocking()` — для обработчика крашей. | InfinityApp, VpnService, оба движка и моста, LogsViewModel |
 | `local/TokenStorage.kt`, `KeystoreTokenProvider.kt` | Хранение токенов (шифрование Keystore). Разлогин — только при явном отказе сервера (401/403 на refresh); сетевые сбои и 5xx сессию не рвут (`lastRefreshRejected`). | TokenAuthenticator |
 | `local/SessionState.kt`, `DeviceIdProvider.kt` | Сессия, device id (HWID для подписки). | — |
 

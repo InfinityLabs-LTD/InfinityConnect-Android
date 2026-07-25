@@ -17,6 +17,7 @@ import com.infinityconnect.vpn.ui.home.HomeScreen
 import com.infinityconnect.vpn.ui.profile.ProfileScreen
 import com.infinityconnect.vpn.ui.settings.AboutScreen
 import com.infinityconnect.vpn.ui.settings.AppPickerScreen
+import com.infinityconnect.vpn.ui.settings.LogsScreen
 import com.infinityconnect.vpn.ui.settings.PingScreen
 import com.infinityconnect.vpn.ui.settings.RoutingScreen
 import com.infinityconnect.vpn.ui.settings.SettingsScreen
@@ -73,6 +74,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                 onOpenProfile = { navController.navigateOnce(entry, Routes.PROFILE) },
                 onOpenRouting = { navController.navigateOnce(entry, Routes.ROUTING) },
                 onOpenPing = { navController.navigateOnce(entry, Routes.PING) },
+                onOpenLogs = { navController.navigateOnce(entry, Routes.LOGS) },
                 onOpenAbout = { navController.navigateOnce(entry, Routes.ABOUT) },
             )
         }
@@ -94,6 +96,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                 onBack = { navController.popBackStack() },
                 onOpenRouting = { navController.navigateOnce(entry, Routes.ROUTING) },
                 onOpenPing = { navController.navigateOnce(entry, Routes.PING) },
+                onOpenLogs = { navController.navigateOnce(entry, Routes.LOGS) },
                 onOpenAbout = { navController.navigateOnce(entry, Routes.ABOUT) },
             )
         }
@@ -115,6 +118,10 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
 
         composable(Routes.ABOUT) {
             AboutScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.LOGS) {
+            LogsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.APP_PICKER) { entry ->

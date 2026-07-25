@@ -6,7 +6,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
-import android.util.Log
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
@@ -39,6 +38,7 @@ class InfinityVpnService : VpnService() {
     @Inject lateinit var engineSelector: EngineSelector
     @Inject lateinit var stateHolder: VpnStateHolder
     @Inject lateinit var routingRepository: RoutingRepository
+    @Inject lateinit var logStore: com.infinityconnect.vpn.data.local.LogStore
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tunInterface: ParcelFileDescriptor? = null
@@ -101,6 +101,8 @@ class InfinityVpnService : VpnService() {
             return
         }
 
+        logStore.i(TAG, "Подключение: keyId=$keyId, сервер=${serverName ?: "#$serverIndex"}")
+
         scope.launch {
             try {
                 val config = when (val r = buildConnection(keyId, serverIndex)) {
@@ -112,11 +114,16 @@ class InfinityVpnService : VpnService() {
                 }
 
                 val engine = engineSelector.select(config)
+                logStore.i(
+                    TAG,
+                    "Профиль готов: ${config.remark}, движок=${engine.javaClass.simpleName}",
+                )
                 val tun = establishTun(config) ?: run {
                     stopWithError("Не удалось создать TUN-интерфейс")
                     return@launch
                 }
                 tunInterface = tun
+                logStore.i(TAG, "TUN поднят (fd=${tun.fd}, mtu=$MTU)")
 
                 // Следим за нижележащей сетью — туннель переживает Wi-Fi ↔ мобильный.
                 registerNetworkCallback()
@@ -136,11 +143,12 @@ class InfinityVpnService : VpnService() {
                 sessionStartMs = System.currentTimeMillis()
                 stateHolder.updateState(TunnelState.Connected)
                 updateNotification(config.remark, "Подключено")
+                logStore.i(TAG, "Туннель установлен: ${config.remark}")
                 startStatsLoop(engine)
             } catch (e: Throwable) {
                 // Throwable, а не Exception: отсутствие нативного AAR даёт
                 // NoClassDefFoundError (Error) — его тоже показываем в UI.
-                Log.e(TAG, "Ошибка запуска туннеля", e)
+                logStore.e(TAG, "Ошибка запуска туннеля", e)
                 val msg = when (e) {
                     is NoClassDefFoundError, is UnsatisfiedLinkError ->
                         "Нативный движок Xray (libv2ray) не подключён. См. README."
@@ -221,13 +229,13 @@ class InfinityVpnService : VpnService() {
             override fun onAvailable(network: Network) {
                 // default-сеть сменилась (Wi-Fi ↔ мобильный) — отдаём новую туннелю.
                 runCatching { setUnderlyingNetworks(arrayOf(network)) }
-                Log.i(TAG, "Underlying network → $network")
+                logStore.i(TAG, "Сеть переключена на $network")
             }
 
             override fun onLost(network: Network) {
                 // Текущая сеть пропала. Не сбрасываем в null — ждём onAvailable
                 // следующей default-сети; система придержит пакеты до переключения.
-                Log.i(TAG, "Underlying network потеряна: $network")
+                logStore.w(TAG, "Сеть потеряна: $network")
             }
         }
         runCatching {
@@ -238,7 +246,7 @@ class InfinityVpnService : VpnService() {
             networkCallback = callback
             // Привязываем активную сеть сразу, не дожидаясь первого колбэка.
             cm.activeNetwork?.let { runCatching { setUnderlyingNetworks(arrayOf(it)) } }
-        }.onFailure { Log.w(TAG, "Не удалось зарегистрировать NetworkCallback: ${it.message}") }
+        }.onFailure { logStore.w(TAG, "Не удалось зарегистрировать NetworkCallback: ${it.message}") }
     }
 
     private fun unregisterNetworkCallback() {
@@ -283,6 +291,7 @@ class InfinityVpnService : VpnService() {
     }
 
     private fun stopTunnel() {
+        logStore.i(TAG, "Отключение по команде пользователя")
         stateHolder.updateState(TunnelState.Disconnecting)
         statsJob?.cancel()
         statsJob = null
@@ -297,7 +306,7 @@ class InfinityVpnService : VpnService() {
     }
 
     private fun stopWithError(message: String) {
-        Log.w(TAG, "Остановка с ошибкой: $message")
+        logStore.e(TAG, "Остановка с ошибкой: $message")
         statsJob?.cancel()
         unregisterNetworkCallback()
         runCatching { activeEngine?.stop() }
@@ -346,7 +355,7 @@ class InfinityVpnService : VpnService() {
             }
             true
         }.getOrElse { e ->
-            Log.e(TAG, "startForeground отклонён системой", e)
+            logStore.e(TAG, "startForeground отклонён системой", e)
             false
         }
     }
@@ -368,7 +377,7 @@ class InfinityVpnService : VpnService() {
             VpnNotifications.ensureChannel(this)
             getSystemService(android.app.NotificationManager::class.java)
                 ?.notify(VpnNotifications.NOTIFICATION_ID, notification)
-        }.onFailure { Log.w(TAG, "Не удалось обновить уведомление: ${it.message}") }
+        }.onFailure { logStore.w(TAG, "Не удалось обновить уведомление: ${it.message}") }
     }
 
     private fun disconnectPendingIntent(): PendingIntent {

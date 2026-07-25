@@ -2,7 +2,6 @@ package com.infinityconnect.vpn.vpn.xray
 
 import android.content.Context
 import android.net.VpnService
-import android.util.Log
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.domain.engine.XrayConfigBuilder
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
@@ -31,6 +30,7 @@ class XrayEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val configBuilder: XrayConfigBuilder,
     private val routingRepository: RoutingRepository,
+    private val logStore: com.infinityconnect.vpn.data.local.LogStore,
 ) : VpnEngine {
 
     @Volatile
@@ -53,24 +53,27 @@ class XrayEngine @Inject constructor(
             // целиком; серверный routing важнее пользовательского режима, но
             // клиентские доменные правила (пресеты/сайты) подмешиваются сверху.
             is EngineConfig.RawXray -> {
-                Log.d(TAG, "Xray raw-config проброшен для ${config.remark} (presets=${routing.sitePresets.size})")
+                logStore.d(TAG, "Xray raw-config проброшен для ${config.remark} (presets=${routing.sitePresets.size})")
                 configBuilder.buildRaw(config, mtu = mtu, routing = routing)
             }
             is EngineConfig.Vless -> {
-                Log.d(TAG, "Xray config построен для ${config.remark} (routing=${routing.mode})")
+                logStore.d(TAG, "Xray config построен для ${config.remark} (routing=${routing.mode})")
                 configBuilder.build(config, mtu = mtu, routing = routing)
             }
             else -> throw IllegalArgumentException("XrayEngine поддерживает только VLESS/RawXray")
         }
 
-        val core = XrayCoreBridge(onCoreShutdown = { onCoreStopped?.invoke() })
+        val core = XrayCoreBridge(
+            logStore = logStore,
+            onCoreShutdown = { onCoreStopped?.invoke() },
+        )
         // Контекст самого VpnService — через него ядро вызывает protect().
         core.initEnv(service, ensureDatDir())
         core.start(configJson = json, tunFd = tunFd)
 
         bridge = core
         running = true
-        Log.i(TAG, "XrayEngine запущен")
+        logStore.i(TAG, "XrayEngine запущен")
     }
 
     override fun stop() {
@@ -78,7 +81,7 @@ class XrayEngine @Inject constructor(
         runCatching { bridge?.stop() }
         bridge = null
         running = false
-        Log.i(TAG, "XrayEngine остановлен")
+        logStore.i(TAG, "XrayEngine остановлен")
     }
 
     override fun queryStats(): TunnelStats? {

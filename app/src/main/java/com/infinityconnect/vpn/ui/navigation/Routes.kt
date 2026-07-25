@@ -11,4 +11,5 @@ object Routes {
     const val PING = "ping"
     const val ABOUT = "about"
     const val APP_PICKER = "app_picker"
+    const val LOGS = "logs"
 }

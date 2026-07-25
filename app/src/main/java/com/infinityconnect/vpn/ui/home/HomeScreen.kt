@@ -64,6 +64,7 @@ fun HomeScreen(
     onOpenProfile: () -> Unit,
     onOpenRouting: () -> Unit,
     onOpenPing: () -> Unit,
+    onOpenLogs: () -> Unit,
     onOpenAbout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -110,6 +111,7 @@ fun HomeScreen(
                     DrawerItem("⚡", "Подключение") { closeThen {} },
                     DrawerItem("🧭", "Маршрутизация") { closeThen(onOpenRouting) },
                     DrawerItem("📶", "Пинг") { closeThen(onOpenPing) },
+                    DrawerItem("📝", "Логи") { closeThen(onOpenLogs) },
                     DrawerItem("👤", "Профиль") { closeThen(onOpenProfile) },
                     DrawerItem("ℹ", "О приложении") { closeThen(onOpenAbout) },
                 ),

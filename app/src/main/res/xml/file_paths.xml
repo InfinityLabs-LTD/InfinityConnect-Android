@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Пути FileProvider: скачанные APK-обновления во внутреннем кэше. -->
+<!--
+  Пути FileProvider: скачанные APK-обновления и выгруженный журнал —
+  оба во внутреннем кэше. Без записи logs/ отправка журнала упала бы с
+  IllegalArgumentException («Failed to find configured root»).
+-->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <cache-path name="logs" path="logs/" />
 </paths>

@@ -3,7 +3,6 @@ package com.infinityconnect.vpn.vpn.xray
 import android.content.Context
 import android.provider.Settings
 import android.util.Base64
-import android.util.Log
 import go.Seq
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
@@ -22,6 +21,7 @@ import java.io.File
  * получает контекст VpnService.
  */
 class XrayCoreBridge(
+    private val logStore: com.infinityconnect.vpn.data.local.LogStore,
     private val onCoreShutdown: () -> Unit,
 ) {
     private var controller: CoreController? = null
@@ -41,7 +41,7 @@ class XrayCoreBridge(
         Seq.setContext(serviceContext.applicationContext)
         Libv2ray.initCoreEnv(assetDir.absolutePath, xudpBaseKey(serviceContext))
         envInitialized = true
-        Log.i(TAG, "Xray env инициализирован, версия ядра: ${runCatching { Libv2ray.checkVersionX() }.getOrDefault("?")}")
+        logStore.i(TAG, "Xray env инициализирован, версия ядра: ${runCatching { Libv2ray.checkVersionX() }.getOrDefault("?")}")
     }
 
     /**
@@ -57,23 +57,25 @@ class XrayCoreBridge(
                 return 0
             }
             override fun onEmitStatus(l: Long, s: String?): Long {
-                if (!s.isNullOrBlank()) Log.d(TAG, "core status[$l]: $s")
+                // Собственные сообщения ядра — главное, ради чего нужен журнал:
+                // причины отказа хендшейка/Reality видны только здесь.
+                if (!s.isNullOrBlank()) logStore.d(TAG, "core[$l]: $s")
                 return 0
             }
         }
         val ctrl = Libv2ray.newCoreController(handler)
         ctrl.startLoop(configJson, tunFd)
         controller = ctrl
-        Log.i(TAG, "Xray-ядро запущено (tunFd=$tunFd)")
+        logStore.i(TAG, "Xray-ядро запущено (tunFd=$tunFd)")
     }
 
     /** Останавливает ядро. Идемпотентно. */
     fun stop() {
         val ctrl = controller ?: return
         runCatching { ctrl.stopLoop() }
-            .onFailure { Log.w(TAG, "Ошибка остановки ядра: ${it.message}") }
+            .onFailure { logStore.w(TAG, "Ошибка остановки ядра: ${it.message}") }
         controller = null
-        Log.i(TAG, "Xray-ядро остановлено")
+        logStore.i(TAG, "Xray-ядро остановлено")
     }
 
     /**
