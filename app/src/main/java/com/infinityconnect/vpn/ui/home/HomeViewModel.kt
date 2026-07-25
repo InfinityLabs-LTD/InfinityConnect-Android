@@ -82,6 +82,16 @@ class HomeViewModel @Inject constructor(
     private var pingJob: Job? = null
     private var switchJob: Job? = null
 
+    /** Восстановленный из хранилища выбор — ждёт сверки со списком серверов. */
+    private var restoredLast: com.infinityconnect.vpn.data.local.LastServer? = null
+
+    /**
+     * Пользователь сам выбрал сервер в этой сессии. Блокирует отложенное
+     * восстановление: асинхронное чтение DataStore не должно перебить
+     * осознанный выбор, если тот случился раньше.
+     */
+    private var userPickedServer = false
+
     /** Состояние туннеля и статистика — напрямую из holder'а. */
     val tunnelState: StateFlow<TunnelState> = stateHolder.state
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TunnelState.Disconnected)
@@ -89,16 +99,35 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TunnelStats())
 
     init {
+        // Восстанавливаем последний выбранный сервер ДО подписки на ключи,
+        // иначе автовыбор в observeKeys успеет поставить первый активный ключ
+        // и запомненный выбор будет затёрт.
+        restoreLastServer()
+
         // Подписка на кэш ключей: обновляем список и авто-выбираем ключ.
         observeKeys()
             .onEach { keys ->
                 val selected = _ui.value.selectedKeyId
+                    ?.takeIf { id -> keys.any { it.id == id } }
                     ?: keys.firstOrNull {
                         it.status(expired = isExpired(it.expiresAt)) ==
                             KeyStatus.ACTIVE
                     }?.id
                     ?: keys.firstOrNull()?.id
-                _ui.update { it.copy(keys = keys, selectedKeyId = selected) }
+                // Ключ сменился (запомненная подписка пропала) — снимаем выбор
+                // сервера, иначе индекс/имя указывали бы на чужую подписку.
+                _ui.update { st ->
+                    if (selected != st.selectedKeyId) {
+                        st.copy(
+                            keys = keys,
+                            selectedKeyId = selected,
+                            selectedServerIndex = 0,
+                            selectedServerName = null,
+                        )
+                    } else {
+                        st.copy(keys = keys, selectedKeyId = selected)
+                    }
+                }
             }
             .launchIn(viewModelScope)
 
@@ -132,6 +161,55 @@ class HomeViewModel @Inject constructor(
 
         refresh(initial = true)
         checkUpdateInBackground()
+    }
+
+    /**
+     * Поднимает последний выбранный сервер из DataStore, чтобы после перезахода
+     * кнопка подключения сразу целилась в него.
+     *
+     * Чтение асинхронное и может завершиться уже после первой эмиссии ключей,
+     * поэтому выбор восстанавливается, только если пользователь к этому моменту
+     * ничего не выбрал сам (`userPickedServer`) — иначе затёрли бы его действие.
+     * Валидность запомненного ключа проверяет [observeKeys]: если такой подписки
+     * больше нет, выбор там же сбрасывается на автоматический.
+     */
+    private fun restoreLastServer() {
+        viewModelScope.launch {
+            val last = settingsStore.currentLastServer() ?: return@launch
+            if (userPickedServer) return@launch
+            _ui.update { st ->
+                st.copy(
+                    selectedKeyId = last.keyId,
+                    selectedServerIndex = last.serverIndex,
+                    selectedServerName = last.serverName,
+                )
+            }
+            restoredLast = last
+        }
+    }
+
+    /**
+     * Сверяет восстановленный выбор с реально пришедшим списком серверов.
+     * Индекс мог «съехать» (подписка перестроилась на панели), поэтому имя
+     * приоритетнее: если сервер с таким именем есть — берём его актуальный
+     * индекс. Если имени нет, а индекс за пределами списка — откатываемся
+     * на первый сервер, чтобы не подключаться в пустоту.
+     */
+    private fun reconcileRestoredServer(keyId: Long, servers: List<SubscriptionServer>) {
+        val last = restoredLast ?: return
+        if (last.keyId != keyId || userPickedServer) return
+        restoredLast = null
+        if (servers.isEmpty()) return
+        val byName = last.serverName?.let { name -> servers.firstOrNull { it.name == name } }
+        val target = byName
+            ?: servers.firstOrNull { it.index == last.serverIndex }
+            ?: servers.first()
+        _ui.update {
+            it.copy(
+                selectedServerIndex = target.index,
+                selectedServerName = target.name,
+            )
+        }
     }
 
     /**
@@ -192,13 +270,16 @@ class HomeViewModel @Inject constructor(
             }
             keyIds.forEach { keyId ->
                 when (val result = getServers(keyId, forceRefresh = force)) {
-                    is AppResult.Success ->
+                    is AppResult.Success -> {
                         _ui.update { st ->
                             st.copy(
                                 serversByKey = st.serversByKey + (keyId to result.data),
                                 loadingKeys = st.loadingKeys - keyId,
                             )
                         }
+                        // Список пришёл — уточняем восстановленный выбор по имени.
+                        reconcileRestoredServer(keyId, result.data)
+                    }
                     is AppResult.Failure ->
                         _ui.update { it.copy(loadingKeys = it.loadingKeys - keyId) }
                 }
@@ -210,6 +291,8 @@ class HomeViewModel @Inject constructor(
     /** Выбор ключа (подписки) — как цель для подключения. */
     fun selectKey(keyId: Long) {
         if (_ui.value.selectedKeyId == keyId) return
+        userPickedServer = true
+        restoredLast = null
         _ui.update {
             it.copy(
                 selectedKeyId = keyId,
@@ -217,6 +300,8 @@ class HomeViewModel @Inject constructor(
                 selectedServerName = null,
             )
         }
+        // Запоминаем и смену подписки: цель подключения сменилась.
+        rememberLastServer(keyId, serverIndex = 0, serverName = null)
     }
 
     /** Кнопка «Пинг всех» (вверху экрана): перемеряет пинг по ВСЕМ подпискам. */
@@ -324,6 +409,8 @@ class HomeViewModel @Inject constructor(
             _ui.update { it.copy(notice = blockedReason(keyId)) }
             return
         }
+        userPickedServer = true
+        restoredLast = null
         _ui.update {
             it.copy(
                 selectedKeyId = keyId,
@@ -331,8 +418,16 @@ class HomeViewModel @Inject constructor(
                 selectedServerName = server.name,
             )
         }
+        rememberLastServer(keyId, server.index, server.name)
         if (isConnectingOrConnected()) {
             switchTo(keyId, server.index, server.name)
+        }
+    }
+
+    /** Персистит выбор, чтобы следующий запуск стартовал с этого же сервера. */
+    private fun rememberLastServer(keyId: Long, serverIndex: Int, serverName: String?) {
+        viewModelScope.launch {
+            settingsStore.saveLastServer(keyId, serverIndex, serverName)
         }
     }
 

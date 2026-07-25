@@ -39,8 +39,12 @@ class TokenAuthenticator(
             }
 
             if (newAccess.isNullOrBlank()) {
-                // refresh истёк/ошибка — разлогин.
-                tokenProvider.clear()
+                // Разлогиниваем ТОЛЬКО если сервер явно отверг refresh (401/403).
+                // При сетевом сбое или 5xx токен ещё жив — молча отдаём 401 на
+                // текущий запрос, сессия переживёт временную недоступность.
+                if (tokenProvider.lastRefreshRejected()) {
+                    tokenProvider.clear()
+                }
                 return null
             }
 

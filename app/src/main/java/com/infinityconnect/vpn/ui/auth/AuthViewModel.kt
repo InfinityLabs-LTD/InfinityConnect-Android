@@ -32,7 +32,9 @@ class AuthViewModel @Inject constructor(
     private val _state = MutableStateFlow(
         AuthUiState(
             registerUrl = discoveryRepository.cached()?.registerUrl,
-            forgotPasswordUrl = discoveryRepository.cached()?.forgotPasswordUrl,
+            forgotPasswordUrl = resolveForgotPasswordUrl(
+                discoveryRepository.cached()?.forgotPasswordUrl,
+            ),
         ),
     )
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
@@ -57,6 +59,26 @@ class AuthViewModel @Inject constructor(
                 is AppResult.Failure ->
                     _state.update { it.copy(loading = false, error = result.error.toMessage()) }
             }
+        }
+    }
+
+    private companion object {
+        /** Актуальная страница восстановления пароля. */
+        const val FORGOT_PASSWORD_URL = "https://infinityconnect.ru/account/password/forgot"
+
+        /** Устаревший путь, который всё ещё отдаёт discovery, — ведёт в 404. */
+        const val LEGACY_FORGOT_PATH = "/account/forgot-password"
+
+        /**
+         * Ссылка «Забыли пароль». Discovery пока отдаёт устаревший
+         * [LEGACY_FORGOT_PATH], поэтому его и пустое значение подменяем на
+         * актуальный адрес. Как только сервер начнёт присылать правильный URL,
+         * он пройдёт как есть — и подмена сама перестанет срабатывать.
+         */
+        fun resolveForgotPasswordUrl(fromDiscovery: String?): String = when {
+            fromDiscovery.isNullOrBlank() -> FORGOT_PASSWORD_URL
+            fromDiscovery.trimEnd('/').endsWith(LEGACY_FORGOT_PATH) -> FORGOT_PASSWORD_URL
+            else -> fromDiscovery
         }
     }
 }

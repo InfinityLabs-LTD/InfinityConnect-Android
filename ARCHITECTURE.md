@@ -75,7 +75,7 @@ HomeScreen (кнопка Connect)
 | `navigation/Routes.kt` | Константы маршрутов. | — |
 | `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). Обёрнут в `ModalNavigationDrawer` — гамбургер открывает боковое меню. | HomeViewModel |
 | `home/AppDrawer.kt` | Боковое меню в стиле сайдбара Windows-клиента: лого, пункты-«пилюли» (активный — акцентный градиент; ⚡ Подключение / 🧭 Маршрутизация / 📶 Пинг / 👤 Профиль / ℹ️ О приложении), статус туннеля внизу. | — |
-| `home/HomeViewModel.kt` | **Ядро UI-логики:** список ключей, выбор сервера, пинг-all, connect/switch/disconnect. Пинг отменяется при подключении и не запускается при активном туннеле (замеры шли бы через VPN). Фоновая проверка обновления клиента при входе (раз за процесс) → snackbar. | ObserveKeys/SyncKeys/GetServers/PingServer/CheckClientUpdate usecase, VpnController, VpnStateHolder, SettingsStore |
+| `home/HomeViewModel.kt` | **Ядро UI-логики:** список ключей, выбор сервера, пинг-all, connect/switch/disconnect. Пинг отменяется при подключении и не запускается при активном туннеле (замеры шли бы через VPN). Фоновая проверка обновления клиента при входе (раз за процесс) → snackbar. Последний выбранный сервер восстанавливается при старте из SettingsStore (сверка по имени, индекс — запасной вариант). | ObserveKeys/SyncKeys/GetServers/PingServer/CheckClientUpdate usecase, VpnController, VpnStateHolder, SettingsStore |
 | `home/ConnectHero.kt`, `home/HomeComponents.kt` | Составные Compose-компоненты главного экрана. | — |
 | `auth/AuthScreen.kt` + `AuthViewModel.kt` | Экран входа по логину/паролю. | AuthUseCases |
 | `profile/ProfileScreen.kt` + `ProfileViewModel.kt` | Аккаунт, подписка, разлогин. | UserRepository, LogoutUseCase |
@@ -133,9 +133,9 @@ HomeScreen (кнопка Connect)
 | `remote/AuthInterceptor.kt`, `InfinityApiInterceptor.kt` | Заголовки, авторизация запросов. | TokenProvider |
 | `remote/TokenAuthenticator.kt` | Рефреш токена при 401. | TokenStorage |
 | `remote/TokenProvider.kt`, `ApiBaseUrlProvider.kt` | Токен и базовый URL (из discovery). | — |
-| `local/SettingsStore.kt` | DataStore настроек (метод пинга и др.). | — читается в HomeVM/SettingsVM |
+| `local/SettingsStore.kt` | DataStore настроек (метод пинга и др.) + **последний выбранный сервер** (`last_key_id`/`last_server_index`/`last_server_name`) для восстановления выбора при следующем запуске. | — читается в HomeVM/SettingsVM |
 | `local/SubscriptionCacheStore.kt` | **Офлайн-кэш тел подписок на диске.** | SubscriptionRepositoryImpl |
-| `local/TokenStorage.kt`, `KeystoreTokenProvider.kt` | Хранение токенов (шифрование Keystore). | — |
+| `local/TokenStorage.kt`, `KeystoreTokenProvider.kt` | Хранение токенов (шифрование Keystore). Разлогин — только при явном отказе сервера (401/403 на refresh); сетевые сбои и 5xx сессию не рвут (`lastRefreshRejected`). | TokenAuthenticator |
 | `local/SessionState.kt`, `DeviceIdProvider.kt` | Сессия, device id (HWID для подписки). | — |
 
 ### `di/` — Hilt-модули

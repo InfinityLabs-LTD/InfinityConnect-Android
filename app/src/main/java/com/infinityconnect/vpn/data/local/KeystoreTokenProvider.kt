@@ -36,9 +36,27 @@ class KeystoreTokenProvider @Inject constructor(
 
     override fun refreshToken(): String? = storage.refreshToken
 
+    /**
+     * Отверг ли сервер refresh-токен при последней попытке (401/403).
+     * Сетевые сбои и 5xx сюда не попадают — иначе временная недоступность
+     * сервера выкидывала бы пользователя из аккаунта.
+     */
+    @Volatile
+    private var refreshRejected = false
+
+    override fun lastRefreshRejected(): Boolean = refreshRejected
+
     override fun refreshTokensBlocking(): String? {
-        val refresh = storage.refreshToken?.takeIf { it.isNotBlank() } ?: return null
-        val base = baseUrlProvider.get() ?: return null
+        val refresh = storage.refreshToken?.takeIf { it.isNotBlank() } ?: run {
+            // Токена нет вовсе — восстанавливать нечего, это честный разлогин.
+            refreshRejected = true
+            return null
+        }
+        val base = baseUrlProvider.get() ?: run {
+            // Discovery ещё не поднялся — не трогаем сессию.
+            refreshRejected = false
+            return null
+        }
 
         // Собираем URL refresh-эндпоинта: <api_base>/auth/refresh.
         val url = base.newBuilder().addPathSegments("auth/refresh").build()
@@ -51,13 +69,26 @@ class KeystoreTokenProvider @Inject constructor(
 
         return runCatching {
             refreshClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val payload = response.body?.string() ?: return null
+                if (!response.isSuccessful) {
+                    // Отвергнут токен только при 401/403. 5xx и прочее —
+                    // проблема сервера: сессию сохраняем, повторим позже.
+                    refreshRejected = response.code == 401 || response.code == 403
+                    return null
+                }
+                val payload = response.body?.string() ?: run {
+                    refreshRejected = false
+                    return null
+                }
                 val tokens = json.decodeFromString<TokenResponseDto>(payload)
                 storage.save(tokens.accessToken, tokens.refreshToken)
+                refreshRejected = false
                 tokens.accessToken
             }
-        }.getOrNull()
+        }.getOrElse {
+            // Таймаут, обрыв, DNS — сеть, а не отказ в доступе.
+            refreshRejected = false
+            null
+        }
     }
 
     override fun clear() {

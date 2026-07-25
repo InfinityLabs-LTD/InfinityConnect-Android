@@ -130,6 +130,32 @@ class SettingsStore @Inject constructor(
 
     suspend fun currentPing(): PingSettings = ping.first()
 
+    /**
+     * Последний выбранный сервер — восстанавливается при следующем запуске,
+     * чтобы кнопка подключения сразу целилась в него. Индекс сам по себе
+     * ненадёжен (список серверов подписки может перестроиться на сервере),
+     * поэтому храним и имя: при восстановлении оно приоритетнее индекса.
+     */
+    val lastServer: Flow<LastServer?> = context.dataStore.data.map { prefs ->
+        val keyId = prefs[KEY_LAST_KEY_ID] ?: return@map null
+        LastServer(
+            keyId = keyId,
+            serverIndex = prefs[KEY_LAST_SERVER_INDEX] ?: 0,
+            serverName = prefs[KEY_LAST_SERVER_NAME],
+        )
+    }
+
+    suspend fun saveLastServer(keyId: Long, serverIndex: Int, serverName: String?) {
+        context.dataStore.edit {
+            it[KEY_LAST_KEY_ID] = keyId
+            it[KEY_LAST_SERVER_INDEX] = serverIndex
+            if (serverName != null) it[KEY_LAST_SERVER_NAME] = serverName
+            else it.remove(KEY_LAST_SERVER_NAME)
+        }
+    }
+
+    suspend fun currentLastServer(): LastServer? = lastServer.first()
+
     suspend fun saveDomain(domain: String) {
         context.dataStore.edit { it[KEY_DOMAIN] = domain }
     }
@@ -172,5 +198,15 @@ class SettingsStore @Inject constructor(
         val KEY_PING_MODE = stringPreferencesKey("ping_mode")
         val KEY_PING_URL = stringPreferencesKey("ping_url")
         val KEY_PING_TIMEOUT = intPreferencesKey("ping_timeout_sec")
+        val KEY_LAST_KEY_ID = longPreferencesKey("last_key_id")
+        val KEY_LAST_SERVER_INDEX = intPreferencesKey("last_server_index")
+        val KEY_LAST_SERVER_NAME = stringPreferencesKey("last_server_name")
     }
 }
+
+/** Последний выбранный пользователем сервер (подписка + позиция + имя). */
+data class LastServer(
+    val keyId: Long,
+    val serverIndex: Int,
+    val serverName: String?,
+)
