@@ -9,8 +9,9 @@ import java.io.IOException
  * [ApiBaseUrlProvider]. Нужен потому, что фактический адрес API известен лишь
  * после discovery, а Retrofit создаётся с плейсхолдерным baseUrl.
  *
- * Работает только для относительных запросов [InfinityApi]; абсолютные
- * @Url-запросы (discovery) идут через отдельный Retrofit без этого интерцептора.
+ * Относительные запросы [InfinityApi] получают префикс base-пути; запросы с
+ * готовым абсолютным адресом (@Url — например, скачивание APK по ссылке из
+ * ответа сервера) пропускаются как есть.
  */
 class InfinityApiInterceptor(
     private val baseUrlProvider: ApiBaseUrlProvider,
@@ -21,6 +22,14 @@ class InfinityApiInterceptor(
             ?: throw IOException("api_base_url не задан: выполните discovery перед запросами")
 
         val original = chain.request()
+
+        // Запрос уже адресован реальному API-хосту — значит это абсолютный
+        // @Url из ответа сервера (ссылка на APK), и путь в нём полный.
+        // Приклеивать base-префикс нельзя: получилось бы /v1/v1/... → 404,
+        // из-за чего скачивание обновления падало с «Ошибка сервера (404)».
+        if (original.url.host == base.host) {
+            return chain.proceed(original)
+        }
 
         // Префикс пути из base (например, "v1") + путь конкретного запроса
         // (например, "auth/login"). Плейсхолдерный хост Retrofit отбрасываем.

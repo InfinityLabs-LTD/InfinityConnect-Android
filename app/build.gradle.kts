@@ -18,7 +18,7 @@ android {
         targetSdk = 35
         // Поднимать при КАЖДОЙ выкладке на сервер обновлений: сравнение версий
         // идёт по коду, а не по versionName (тот у соседних релизов совпадает).
-        versionCode = 2
+        versionCode = 1
         versionName = "1.0.0"
         vectorDrawables { useSupportLibrary = true }
 
