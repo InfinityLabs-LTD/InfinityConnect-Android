@@ -108,7 +108,13 @@ private fun UpdateCard(
                 }
 
                 is UpdateUiState.Available -> {
-                    StatusText("Доступна версия ${state.update.version}")
+                    // Код сборки в скобках обязателен: versionName у соседних
+                    // релизов часто совпадает (1.0.0 → 1.0.0), и без кода строка
+                    // «Доступна версия 1.0.0» при установленной 1.0.0 выглядит
+                    // как ошибка.
+                    StatusText(
+                        "Доступна версия ${state.update.version} (${state.update.versionCode})",
+                    )
                     if (state.update.notes.isNotBlank()) {
                         Text(
                             text = state.update.notes,

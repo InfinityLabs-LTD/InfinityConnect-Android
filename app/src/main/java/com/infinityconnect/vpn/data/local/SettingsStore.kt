@@ -145,6 +145,20 @@ class SettingsStore @Inject constructor(
         )
     }
 
+    /**
+     * versionCode обновления, о котором пользователь просил не напоминать.
+     * 0 — не отказывался ни от чего.
+     *
+     * Храним именно код версии, а не флаг «не уведомлять вообще»: отказ касается
+     * конкретного релиза, и о следующем пользователя нужно предупредить снова.
+     */
+    val skippedUpdateCode: Flow<Long> = context.dataStore.data
+        .map { it[KEY_UPDATE_SKIPPED_CODE] ?: 0L }
+
+    suspend fun skipUpdate(versionCode: Long) {
+        context.dataStore.edit { it[KEY_UPDATE_SKIPPED_CODE] = versionCode }
+    }
+
     suspend fun saveLastServer(keyId: Long, serverIndex: Int, serverName: String?) {
         context.dataStore.edit {
             it[KEY_LAST_KEY_ID] = keyId
@@ -201,6 +215,7 @@ class SettingsStore @Inject constructor(
         val KEY_LAST_KEY_ID = longPreferencesKey("last_key_id")
         val KEY_LAST_SERVER_INDEX = intPreferencesKey("last_server_index")
         val KEY_LAST_SERVER_NAME = stringPreferencesKey("last_server_name")
+        val KEY_UPDATE_SKIPPED_CODE = longPreferencesKey("update_skipped_code")
     }
 }
 

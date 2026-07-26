@@ -61,6 +61,13 @@ data class HomeUiState(
     val notice: String? = null,
     /** Доступное обновление клиента (фоновая проверка при входе). */
     val availableUpdate: com.infinityconnect.vpn.domain.model.ClientUpdate? = null,
+    /**
+     * Обновление, о котором нужно показать диалог. Отдельно от
+     * [availableUpdate]: само наличие обновления держим для экрана «О
+     * приложении», а диалог показываем один раз и только если пользователь от
+     * этой версии не отказался.
+     */
+    val updatePrompt: com.infinityconnect.vpn.domain.model.ClientUpdate? = null,
 )
 
 @HiltViewModel
@@ -214,8 +221,13 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Фоновая проверка обновления клиента при входе в приложение — один раз
-     * за жизнь процесса. При наличии обновления показывает snackbar и
-     * помечает состояние (кнопка установки — на экране «О приложении»).
+     * за жизнь процесса. При наличии обновления показывает ДИАЛОГ (раньше был
+     * snackbar — его слишком легко пропустить) и помечает состояние; кнопка
+     * установки есть и на экране «О приложении».
+     *
+     * Диалог не показывается, если пользователь уже отказался именно от этой
+     * версии («Не напоминать об этой версии»). О следующем релизе он узнает
+     * снова — отказ привязан к versionCode, а не «навсегда».
      */
     private fun checkUpdateInBackground() {
         if (updateCheckDone) return
@@ -224,15 +236,25 @@ class HomeViewModel @Inject constructor(
             val result = checkClientUpdate()
             if (result is AppResult.Success) {
                 result.data?.let { update ->
+                    val skipped = settingsStore.skippedUpdateCode.first()
                     _ui.update {
                         it.copy(
                             availableUpdate = update,
-                            notice = "Доступно обновление ${update.version} — см. «О приложении»",
+                            updatePrompt = update.takeIf { u -> u.versionCode != skipped },
                         )
                     }
                 }
             }
             // Ошибки проверки молча игнорируем — это фоновая операция.
+        }
+    }
+
+    /** Закрывает диалог обновления. [skip] — больше не напоминать об этой версии. */
+    fun dismissUpdatePrompt(skip: Boolean) {
+        val update = _ui.value.updatePrompt
+        _ui.update { it.copy(updatePrompt = null) }
+        if (skip && update != null) {
+            viewModelScope.launch { settingsStore.skipUpdate(update.versionCode) }
         }
     }
 

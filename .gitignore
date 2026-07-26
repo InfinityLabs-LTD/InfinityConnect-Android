@@ -20,6 +20,9 @@ local.properties
 # Готовые APK — не коммитим (большие бинарники)
 /*.apk
 
+# Служебный каталог Kotlin-компилятора (сессии сборки)
+/.kotlin/
+
 # sources.jar рядом с AAR — тоже артефакт сборки gomobile
 /app/libs/*-sources.jar
 

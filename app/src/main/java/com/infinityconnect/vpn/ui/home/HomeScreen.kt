@@ -90,6 +90,19 @@ fun HomeScreen(
         }
     }
 
+    // Диалог о новой версии. Именно диалог, а не snackbar: обновление легко
+    // пропустить, а установка APK — осознанное действие пользователя.
+    ui.updatePrompt?.let { update ->
+        UpdateAvailableDialog(
+            update = update,
+            onUpdate = { skip ->
+                viewModel.dismissUpdatePrompt(skip)
+                onOpenAbout()
+            },
+            onDismiss = { skip -> viewModel.dismissUpdatePrompt(skip) },
+        )
+    }
+
     // Боковое меню в стиле сайдбара Windows-клиента.
     val drawerState = androidx.compose.material3.rememberDrawerState(
         androidx.compose.material3.DrawerValue.Closed,
