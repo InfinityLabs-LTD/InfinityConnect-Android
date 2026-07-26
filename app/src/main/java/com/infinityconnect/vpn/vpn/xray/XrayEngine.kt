@@ -2,6 +2,7 @@ package com.infinityconnect.vpn.vpn.xray
 
 import android.content.Context
 import android.net.VpnService
+import com.infinityconnect.vpn.BuildFlags
 import com.infinityconnect.vpn.domain.engine.EngineConfig
 import com.infinityconnect.vpn.domain.engine.XrayConfigBuilder
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
@@ -54,11 +55,21 @@ class XrayEngine @Inject constructor(
             // клиентские доменные правила (пресеты/сайты) подмешиваются сверху.
             is EngineConfig.RawXray -> {
                 logStore.d(TAG, "Xray raw-config проброшен для ${config.remark} (presets=${routing.sitePresets.size})")
-                configBuilder.buildRaw(config, mtu = mtu, routing = routing)
+                configBuilder.buildRaw(
+                    config,
+                    mtu = mtu,
+                    routing = routing,
+                    enableLogging = BuildFlags.VERBOSE_CORE_LOG,
+                )
             }
             is EngineConfig.Vless -> {
                 logStore.d(TAG, "Xray config построен для ${config.remark} (routing=${routing.mode})")
-                configBuilder.build(config, mtu = mtu, routing = routing)
+                configBuilder.build(
+                    config,
+                    mtu = mtu,
+                    routing = routing,
+                    enableLogging = BuildFlags.VERBOSE_CORE_LOG,
+                )
             }
             else -> throw IllegalArgumentException("XrayEngine поддерживает только VLESS/RawXray")
         }

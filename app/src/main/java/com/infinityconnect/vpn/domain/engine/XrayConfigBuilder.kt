@@ -129,12 +129,15 @@ class XrayConfigBuilder @Inject constructor(
         config: EngineConfig.RawXray,
         mtu: Int = DEFAULT_MTU,
         routing: RoutingSettings = RoutingSettings(),
+        enableLogging: Boolean = false,
     ): String {
         val src = config.root
         val merged = mergeClientRulesIntoRaw(src, routing)
         val root = buildJsonObject {
-            // log: приглушаем (в подписке может стоять debug).
-            putJsonObject("log") { put("loglevel", "none") }
+            // log: уровень задаём сами (в подписке может стоять debug).
+            // Сообщения ядра уходят в onEmitStatus → LogStore: без них причина
+            // «туннель поднят, а трафика нет» не видна вообще.
+            putJsonObject("log") { put("loglevel", if (enableLogging) "warning" else "none") }
             // Статистика трафика по аутбаундам (для UI-счётчика скорости).
             putJsonObject("stats") {}
             putJsonObject("policy") {
@@ -518,7 +521,16 @@ class XrayConfigBuilder @Inject constructor(
 
     private companion object {
         const val DEFAULT_MTU = 1500
-        const val TUN_ADDRESS = "10.10.0.2"
+
+        /**
+         * Шлюз TUN-инбаунда. Обязан совпадать с ПЕРВЫМ адресом префикса,
+         * который сервис выставляет на интерфейсе
+         * ([com.infinityconnect.vpn.vpn.InfinityVpnService] TUN_ADDRESS =
+         * 10.10.0.1/30). Раньше здесь стоял 10.10.0.2 — это peer-адрес,
+         * добавляемый точечно (/32) ради системного стека sing-tun в Hysteria2,
+         * а не адрес сети.
+         */
+        const val TUN_ADDRESS = "10.10.0.1"
 
         /** Тег freedom-outbound, добавляемого клиентом в raw-конфиг для direct-правил. */
         const val CLIENT_DIRECT_TAG = "direct-client"
