@@ -10,9 +10,16 @@
     *** Companion;
 }
 
-# gomobile-обёртки нативных ядер: классы дергаются из JNI (libgojni.so) по
-# имени — R8 не должен их переименовывать/выкидывать.
+# gomobile-обёртки нативных ядер: классы дергаются из JNI (libgojni.so /
+# libhy2gojni.so) по имени — R8 не должен их переименовывать/выкидывать.
+#
+# go.** — рантайм gomobile для Xray (libv2ray).
+# hy2go.** — тот же рантайм для Hysteria2, переименованный патчем тулчейна,
+#   чтобы два AAR не конфликтовали (см. hysteria2-mobile/apply-toolchain-patch.sh).
+#   Без этого правила Hysteria2 падает ТОЛЬКО в релизе: JNI ищет hy2go/Seq,
+#   а R8 его уже обфусцировал.
 -keep class go.** { *; }
+-keep class hy2go.** { *; }
 -keep class libv2ray.** { *; }
 -keep class hysteria2.** { *; }
 
