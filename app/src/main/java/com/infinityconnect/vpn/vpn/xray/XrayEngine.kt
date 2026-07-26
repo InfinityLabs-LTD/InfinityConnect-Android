@@ -49,6 +49,10 @@ class XrayEngine @Inject constructor(
         // Актуальные настройки маршрутизации (режим/пресеты/домены) — нужны
         // обоим путям: Vless применяет их целиком, RawXray — доменные правила.
         val routing = runBlocking { routingRepository.current() }
+        // Error-лог ядра: единственный канал, где видны причины отказов
+        // соединений (в onEmitStatus приходят только старт/стоп). Мост
+        // переливает его в журнал приложения.
+        val errorLog = if (BuildFlags.VERBOSE_CORE_LOG) coreErrorLogFile() else null
         val json = when (config) {
             // Готовый конфиг из подписки (автовыбор/balancer/WHITE) — пробрасываем
             // целиком; серверный routing важнее пользовательского режима, но
@@ -60,6 +64,7 @@ class XrayEngine @Inject constructor(
                     mtu = mtu,
                     routing = routing,
                     enableLogging = BuildFlags.VERBOSE_CORE_LOG,
+                    errorLogPath = errorLog?.absolutePath,
                 )
             }
             is EngineConfig.Vless -> {
@@ -69,6 +74,7 @@ class XrayEngine @Inject constructor(
                     mtu = mtu,
                     routing = routing,
                     enableLogging = BuildFlags.VERBOSE_CORE_LOG,
+                    errorLogPath = errorLog?.absolutePath,
                 )
             }
             else -> throw IllegalArgumentException("XrayEngine поддерживает только VLESS/RawXray")
@@ -80,7 +86,7 @@ class XrayEngine @Inject constructor(
         )
         // Контекст самого VpnService — через него ядро вызывает protect().
         core.initEnv(service, ensureDatDir())
-        core.start(configJson = json, tunFd = tunFd)
+        core.start(configJson = json, tunFd = tunFd, errorLog = errorLog)
 
         bridge = core
         running = true
@@ -107,7 +113,17 @@ class XrayEngine @Inject constructor(
     private fun ensureDatDir(): File =
         File(context.filesDir, "xray").apply { if (!exists()) mkdirs() }
 
+    /**
+     * Файл, в который ядро пишет свой error-лог. Лежит рядом со служебными
+     * файлами Xray; мост дочитывает его в журнал приложения и очищает при
+     * каждом старте, так что расти бесконечно он не может.
+     */
+    private fun coreErrorLogFile(): File = File(ensureDatDir(), CORE_LOG_NAME)
+
     private companion object {
         const val TAG = "XrayEngine"
+
+        /** Имя файла error-лога ядра в каталоге xray/. */
+        const val CORE_LOG_NAME = "core-error.log"
     }
 }

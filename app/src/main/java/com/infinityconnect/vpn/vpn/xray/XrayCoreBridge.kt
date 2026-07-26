@@ -4,10 +4,18 @@ import android.content.Context
 import android.provider.Settings
 import android.util.Base64
 import go.Seq
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.Libv2ray
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * Мост к нативному ядру Xray (AndroidLibXrayLite / пакет libv2ray, собран
@@ -28,6 +36,16 @@ class XrayCoreBridge(
 
     @Volatile
     private var envInitialized = false
+
+    /**
+     * Файл error-лога ядра и позиция, до которой он уже перелит в журнал.
+     * Ядро пишет туда причины отказов соединений — в [CoreCallbackHandler]
+     * они не приходят (там только старт/стоп), поэтому дочитываем файл сами.
+     */
+    private var errorLogFile: File? = null
+    private var errorLogOffset = 0L
+    private var drainJob: Job? = null
+    private val drainScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * Инициализирует окружение ядра (единожды на процесс): контекст для доступа
@@ -54,7 +72,13 @@ class XrayCoreBridge(
      *
      * @throws Exception при ошибке запуска (перехватывается движком → Error).
      */
-    fun start(configJson: String, tunFd: Int) {
+    fun start(configJson: String, tunFd: Int, errorLog: File? = null) {
+        // Стартуем с чистого файла: иначе в журнал уехал бы лог прошлой сессии.
+        errorLog?.let { file ->
+            runCatching { if (file.exists()) file.delete() }
+            errorLogFile = file
+            errorLogOffset = 0
+        }
         val handler = object : CoreCallbackHandler {
             override fun startup(): Long = 0
             override fun shutdown(): Long {
@@ -63,8 +87,9 @@ class XrayCoreBridge(
                 return 0
             }
             override fun onEmitStatus(l: Long, s: String?): Long {
-                // Собственные сообщения ядра — главное, ради чего нужен журнал:
-                // причины отказа хендшейка/Reality видны только здесь.
+                // Только события жизненного цикла ядра («Started successfully»,
+                // «Core stopped»). Причины отказов соединений сюда НЕ приходят —
+                // за ними см. drainErrorLog(): ядро пишет их в свой error-лог.
                 if (!s.isNullOrBlank()) logStore.d(TAG, "core[$l]: $s")
                 return 0
             }
@@ -72,7 +97,44 @@ class XrayCoreBridge(
         val ctrl = Libv2ray.newCoreController(handler)
         ctrl.startLoop(configJson, tunFd)
         controller = ctrl
+        startErrorLogDrain()
         logStore.i(TAG, "Xray-ядро запущено (tunFd=$tunFd)")
+    }
+
+    /**
+     * Периодически переливает свежие строки error-лога ядра в журнал.
+     * Читаем с сохранённого смещения, чтобы не дублировать уже перелитое.
+     */
+    private fun startErrorLogDrain() {
+        val file = errorLogFile ?: return
+        drainJob?.cancel()
+        drainJob = drainScope.launch {
+            while (isActive) {
+                delay(DRAIN_INTERVAL_MS)
+                drainErrorLog(file)
+            }
+        }
+    }
+
+    /** Дочитывает файл с [errorLogOffset] и пишет новые строки в журнал. */
+    private fun drainErrorLog(file: File) {
+        runCatching {
+            if (!file.exists()) return
+            val length = file.length()
+            // Ядро могло пересоздать файл — тогда читаем с начала.
+            if (length < errorLogOffset) errorLogOffset = 0
+            if (length == errorLogOffset) return
+            RandomAccessFile(file, "r").use { raf ->
+                raf.seek(errorLogOffset)
+                while (true) {
+                    val line = raf.readLine() ?: break
+                    // readLine() отдаёт байты как ISO-8859-1 — возвращаем UTF-8.
+                    val text = String(line.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8).trim()
+                    if (text.isNotEmpty()) logStore.d(TAG, "xray: $text")
+                }
+                errorLogOffset = raf.filePointer
+            }
+        }.onFailure { logStore.w(TAG, "Не удалось прочитать error-лог ядра: ${it.message}") }
     }
 
     /** Останавливает ядро. Идемпотентно. */
@@ -81,6 +143,10 @@ class XrayCoreBridge(
         runCatching { ctrl.stopLoop() }
             .onFailure { logStore.w(TAG, "Ошибка остановки ядра: ${it.message}") }
         controller = null
+        // Забираем хвост лога до отмены откачки — там причина остановки.
+        drainJob?.cancel()
+        drainJob = null
+        errorLogFile?.let { drainErrorLog(it) }
         logStore.i(TAG, "Xray-ядро остановлено")
     }
 
@@ -122,5 +188,11 @@ class XrayCoreBridge(
 
     private companion object {
         const val TAG = "XrayCoreBridge"
+
+        /**
+         * Период откачки error-лога ядра. Секунда: строки нужны «почти сразу»
+         * (пользователь жалуется в моменте), но чаще читать файл смысла нет.
+         */
+        const val DRAIN_INTERVAL_MS = 1000L
     }
 }

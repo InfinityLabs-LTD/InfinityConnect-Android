@@ -53,11 +53,10 @@ class XrayConfigBuilder @Inject constructor(
         mtu: Int = DEFAULT_MTU,
         enableLogging: Boolean = false,
         routing: RoutingSettings = RoutingSettings(),
+        errorLogPath: String? = null,
     ): String {
         val root = buildJsonObject {
-            putJsonObject("log") {
-                put("loglevel", if (enableLogging) "warning" else "none")
-            }
+            put("log", buildLog(enableLogging, errorLogPath))
             // Сбор статистики трафика по аутбаундам — иначе queryStats пуст.
             putJsonObject("stats") {}
             putJsonObject("policy") {
@@ -130,14 +129,13 @@ class XrayConfigBuilder @Inject constructor(
         mtu: Int = DEFAULT_MTU,
         routing: RoutingSettings = RoutingSettings(),
         enableLogging: Boolean = false,
+        errorLogPath: String? = null,
     ): String {
         val src = config.root
         val merged = mergeClientRulesIntoRaw(src, routing)
         val root = buildJsonObject {
             // log: уровень задаём сами (в подписке может стоять debug).
-            // Сообщения ядра уходят в onEmitStatus → LogStore: без них причина
-            // «туннель поднят, а трафика нет» не видна вообще.
-            putJsonObject("log") { put("loglevel", if (enableLogging) "warning" else "none") }
+            put("log", buildLog(enableLogging, errorLogPath))
             // Статистика трафика по аутбаундам (для UI-счётчика скорости).
             putJsonObject("stats") {}
             putJsonObject("policy") {
@@ -157,6 +155,23 @@ class XrayConfigBuilder @Inject constructor(
             putJsonArray("inbounds") { add(buildTunInbound(mtu)) }
         }
         return json.encodeToString(JsonObject.serializer(), root)
+    }
+
+    /**
+     * Блок `log` конфига ядра.
+     *
+     * Ключевое: при [errorLogPath] ядро пишет свой error-лог в ФАЙЛ. Колбэк
+     * `onEmitStatus` отдаёт только события жизненного цикла ядра («Started
+     * successfully», «Core stopped») — причины отказов соединений (отказ
+     * хендшейка, Reality, DNS, недоступность outbound) идут в error-лог и
+     * никуда больше. Без файла диагностировать «туннель поднят, а трафика
+     * нет» нечем: журнал молчит ровно там, где нужен.
+     */
+    private fun buildLog(enableLogging: Boolean, errorLogPath: String?) = buildJsonObject {
+        put("loglevel", if (enableLogging) "warning" else "none")
+        if (enableLogging && errorLogPath != null) {
+            put("error", errorLogPath)
+        }
     }
 
     /** Результат подмешивания клиентских правил в raw-конфиг подписки. */

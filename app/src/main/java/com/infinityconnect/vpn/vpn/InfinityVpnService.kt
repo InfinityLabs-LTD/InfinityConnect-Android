@@ -55,6 +55,21 @@ class InfinityVpnService : VpnService() {
     @Volatile
     private var tunnelEstablished = false
 
+    /**
+     * startId последней принятой команды. Передаётся в [stopSelfResult], чтобы
+     * не убить сервис, в который уже пришла более свежая команда.
+     *
+     * Без этого быстрый цикл «отключить → подключить» (переключение сервера
+     * за доли секунды) ронял приложение: stopTunnel() звал stopSelf(), система
+     * начинала сносить сервис, а прилетевший следом startForegroundService()
+     * попадал в тот же, уже помеченный на уничтожение ServiceRecord. Промоушен
+     * в нём не засчитывался, и через ~5 секунд прилетал
+     * ForegroundServiceDidNotStartInTimeException — причём в UI-процесс,
+     * который и вызывал startForegroundService().
+     */
+    @Volatile
+    private var lastStartId = 0
+
 
     /**
      * Колбэк смены нижележащей сети. При Wi-Fi ↔ мобильный система меняет
@@ -78,6 +93,7 @@ class InfinityVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         // Сервис всегда стартует через startForegroundService(), поэтому промоушен
         // обязан произойти на ЛЮБОМ пути — включая disconnect и неизвестную
         // команду. Иначе система убьёт процесс за то, что мы не промоутились
@@ -150,6 +166,13 @@ class InfinityVpnService : VpnService() {
                 // система поднимет его заново по этой же команде, и ядро
                 // стартует в чистом рантайме.
                 if (restartIfEngineChanged(engine, keyId, serverIndex, serverName)) return@launch
+
+                // CONNECT поверх живого туннеля (переключение сервера в рамках
+                // одного ядра) — гасим предыдущий, иначе его движок продолжит
+                // читать свой TUN, а дескриптор утечёт: establishTun() ниже
+                // перезапишет tunInterface, и закрыть старый будет уже некому.
+                releaseActiveTunnel()
+
                 val tun = establishTun(config) ?: run {
                     stopWithError("Не удалось создать TUN-интерфейс")
                     return@launch
@@ -216,6 +239,25 @@ class InfinityVpnService : VpnService() {
     }
 
     /**
+     * Гасит активный туннель: останавливает движок и закрывает TUN.
+     *
+     * Порядок обязателен: сначала движок, потом TUN. Ядро держит собственную
+     * (dup) копию TUN-дескриптора и закрывает её в stop(); закрыть свой fd
+     * раньше — значит оставить ядро читать уже закрытый интерфейс, а двойное
+     * закрытие ловит fdsan (Android 12+) и роняет процесс.
+     */
+    private fun releaseActiveTunnel() {
+        tunnelEstablished = false
+        statsJob?.cancel()
+        statsJob = null
+        unregisterNetworkCallback()
+        runCatching { activeEngine?.stop() }
+        activeEngine = null
+        runCatching { tunInterface?.close() }
+        tunInterface = null
+    }
+
+    /**
      * Если в этом процессе уже отработало ДРУГОЕ ядро — перезапускает процесс
      * сервиса и возвращает true (вызывающий обязан прервать подключение).
      *
@@ -245,14 +287,7 @@ class InfinityVpnService : VpnService() {
         )
         // Туннель и предыдущее ядро гасим штатно — иначе TUN останется висеть,
         // а ядро не успеет закрыть свою копию дескриптора.
-        tunnelEstablished = false
-        statsJob?.cancel()
-        statsJob = null
-        unregisterNetworkCallback()
-        runCatching { activeEngine?.stop() }
-        activeEngine = null
-        runCatching { tunInterface?.close() }
-        tunInterface = null
+        releaseActiveTunnel()
 
         // Состояние оставляем Connecting: для пользователя это одно непрерывное
         // подключение, а сервис вот-вот стартует заново и доведёт его до конца.
@@ -431,36 +466,33 @@ class InfinityVpnService : VpnService() {
     private fun stopTunnel() {
         logStore.i(TAG, "Отключение по команде пользователя")
         stateHolder.updateState(TunnelState.Disconnecting)
-        tunnelEstablished = false
-        statsJob?.cancel()
-        statsJob = null
-        unregisterNetworkCallback()
-        // Порядок обязателен: сначала движок, потом TUN. Ядро держит собственную
-        // (dup) копию TUN-дескриптора и закрывает её в stop(); закрыть свой fd
-        // раньше — значит оставить ядро читать уже закрытый интерфейс.
-        runCatching { activeEngine?.stop() }
-        activeEngine = null
-        runCatching { tunInterface?.close() }
-        tunInterface = null
+        releaseActiveTunnel()
         stateHolder.reset()
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        stopIfNoNewerCommand()
     }
 
     private fun stopWithError(message: String) {
         logStore.e(TAG, "Остановка с ошибкой: $message")
-        tunnelEstablished = false
-        statsJob?.cancel()
-        unregisterNetworkCallback()
-        // Порядок как в stopTunnel(): движок отпускает свою копию TUN-fd первым.
-        runCatching { activeEngine?.stop() }
-        activeEngine = null
-        runCatching { tunInterface?.close() }
-        tunInterface = null
+        releaseActiveTunnel()
         stateHolder.setActiveConnection(null)
         stateHolder.updateState(TunnelState.Error(message))
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        stopIfNoNewerCommand()
+    }
+
+    /**
+     * Останавливает сервис, только если за время работы не пришла более свежая
+     * команда. [stopSelfResult] возвращает false, когда startId устарел —
+     * значит уже прилетел новый CONNECT, и убивать сервис нельзя: система
+     * начала бы уничтожение ServiceRecord, в котором новая команда должна
+     * промоутиться в foreground (см. [lastStartId]).
+     */
+    private fun stopIfNoNewerCommand() {
+        val stopped = runCatching { stopSelfResult(lastStartId) }.getOrDefault(true)
+        if (!stopped) {
+            logStore.i(TAG, "Остановка отменена: пришла новая команда")
+        }
     }
 
     /**
