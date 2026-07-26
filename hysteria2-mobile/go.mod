@@ -36,4 +36,3 @@ require (
 replace github.com/apernet/hysteria/core/v2 => ../hysteria/core
 
 replace github.com/apernet/hysteria/extras/v2 => ../hysteria/extras
-

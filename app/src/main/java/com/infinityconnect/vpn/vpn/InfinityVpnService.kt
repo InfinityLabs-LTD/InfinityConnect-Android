@@ -301,6 +301,17 @@ class InfinityVpnService : VpnService() {
             .setMtu(MTU)
             .addAddress(TUN_ADDRESS, TUN_PREFIX)
             .addRoute("0.0.0.0", 0)        // весь IPv4-трафик в туннель
+            .also { b ->
+                // Системному стеку sing-tun (Hysteria2) нужны ОБА адреса
+                // префикса: на первом (10.10.0.1) он слушает TCP-форвардер, а
+                // вторым (10.10.0.2) подписывает пакеты, которые к этому
+                // форвардеру идут, — и на него же приходят ответы. Если второго
+                // адреса нет на интерфейсе, ответный трафик отбрасывается ядром:
+                // соединения устанавливаются, наружу данные уходят, а обратно в
+                // приложения не возвращаются («сайты не открываются»).
+                // Xray этот адрес не использует, лишним он ему не мешает.
+                runCatching { b.addAddress(TUN_ADDRESS_PEER, TUN_PEER_PREFIX) }
+            }
             .addDnsServer(DNS_PRIMARY)
             .addDnsServer(DNS_SECONDARY)
 
@@ -566,6 +577,16 @@ class InfinityVpnService : VpnService() {
          */
         private const val TUN_ADDRESS = "10.10.0.1"
         private const val TUN_PREFIX = 30
+
+        /**
+         * Второй адрес того же префикса. Системный стек sing-tun подписывает им
+         * пакеты, идущие на свой TCP-форвардер (`inet4Address` в его коде), и
+         * ждёт на него ответы — без этого адреса на интерфейсе обратный трафик
+         * не доходит до приложений. Префикс /32: адрес добавляется точечно, сеть
+         * уже описана [TUN_ADDRESS]/[TUN_PREFIX].
+         */
+        private const val TUN_ADDRESS_PEER = "10.10.0.2"
+        private const val TUN_PEER_PREFIX = 32
         private const val DNS_PRIMARY = "1.1.1.1"
         private const val DNS_SECONDARY = "8.8.8.8"
         private const val STATS_INTERVAL_MS = 1000L

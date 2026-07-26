@@ -53,6 +53,26 @@ gomobile-функции (`NewTunnel`) сами вызваны из Java, и их
 пользователю), а `Tunnel.Close()` изолирован `recover()` — паника в Go на
 teardown тоже убила бы процесс целиком.
 
+## Сверяться с эталоном в самой hysteria
+
+Этот форк sing-tun живёт в репозитории apernet/hysteria и используется там же —
+[`app/internal/tun/server.go`](https://github.com/apernet/hysteria/blob/master/app/internal/tun/server.go).
+Это рабочая референс-реализация того же стека: набор `StackOptions`, схема
+двунаправленного копирования и работа с буферами сверены по ней. **При любой
+правке форвардинга сначала смотреть туда.**
+
+Два дефекта, найденные именно так (оба давали «туннель поднят, но сайты не
+открываются» — трафик от сервера приходил, а в приложения не попадал):
+
+| Было | Стало | Почему |
+|---|---|---|
+| `conn.WritePacket(buf.With(data), …)` | `buf.As(data)` | `With` создаёт буфер с `end=0`, то есть **пустой** — в TUN уходили датаграммы нулевой длины, и весь QUIC-трафик (YouTube и т.п.) не доходил. |
+| `InterfaceFinder` не задан | `&interfaceFinder{}` | Без него часть путей стека получает индекс интерфейса -1 и молча роняет пакеты. |
+
+Единственное намеренное расхождение с эталоном — `ForwarderBindInterface`: там
+`true`, здесь `false`, потому что на Android привязка форвардера к интерфейсу
+конфликтует с `VpnService.protect` (сокеты ядра обязаны идти мимо TUN).
+
 Собирается в `app/libs/libhysteria2.aar`, который подключается в
 `app/build.gradle.kts`. Java-пакет `hysteria2` (Hysteria2 / Tunnel / Protector /
 TunnelCallbackHandler) вызывается из Kotlin-моста
@@ -67,6 +87,9 @@ TunnelCallbackHandler) вызывается из Kotlin-моста
   hysteria-клиента, TUN-стек sing-tun, форвардинг TCP/UDP через клиент.
 - `connfactory.go` — `ConnFactory`, который защищает UDP-сокет QUIC через
   `Protector` (VpnService.protect), иначе трафик клиента зациклится в TUN.
+- `ifinder.go` — `interfaceFinder` для `StackOptions.InterfaceFinder` (копия
+  эталонной реализации из hysteria). Без него часть путей стека получает индекс
+  интерфейса -1 и молча отбрасывает пакеты.
 - `fd_unix.go` / `fd_other.go` — `closeFD`: закрытие TUN-дескриптора на путях
   аварийного выхода из `NewTunnel` (владение уже перешло к обёртке, см.
   инвариант 1). Второй файл — заглушка для не-Unix платформ, чтобы пакет

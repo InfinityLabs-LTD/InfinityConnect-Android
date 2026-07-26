@@ -183,6 +183,12 @@ func NewTunnel(configJson string, tunFd int, mtu int, tunCidr string, handler Tu
 
 	// Этот форк sing-tun собран без gVisor (WithGVisor=false) — используем
 	// системный стек, он не требует gvisor.dev и работает поверх TUN fd.
+	//
+	// Набор опций сверен с эталонным использованием этого же форка в самой
+	// hysteria (app/internal/tun/server.go). Отличие одно и намеренное:
+	// ForwarderBindInterface там true, а здесь false — на Android привязка
+	// форвардера к интерфейсу конфликтует с VpnService.protect (сокеты ядра
+	// обязаны идти МИМО TUN, иначе трафик зацикливается).
 	stackOpts := tun.StackOptions{
 		Context:    context.Background(),
 		Tun:        tunIf,
@@ -190,6 +196,10 @@ func NewTunnel(configJson string, tunFd int, mtu int, tunCidr string, handler Tu
 		UDPTimeout: int64((5 * time.Minute).Seconds()),
 		Handler:    t,
 		Logger:     logger.NOP(),
+		// InterfaceFinder нужен стеку, чтобы сопоставлять индексы/имена
+		// интерфейсов; без него часть путей внутри стека получает -1 и молча
+		// отбрасывает пакеты.
+		InterfaceFinder: &interfaceFinder{},
 	}
 	// Внутри stack fd не переоткрываем — обнуляем, чтобы не было double-close.
 	stackOpts.TunOptions.FileDescriptor = 0
@@ -247,12 +257,19 @@ func (t *Tunnel) NewConnection(ctx context.Context, conn net.Conn, m M.Metadata)
 	}
 	defer rc.Close()
 
-	errCh := make(chan error, 2)
-	go func() { n, e := io.Copy(rc, conn); t.up.Add(n); errCh <- e }()
-	go func() { n, e := io.Copy(conn, rc); t.down.Add(n); errCh <- e }()
+	// Двунаправленное копирование. Схема — как в эталонной реализации самой
+	// hysteria (app/internal/tun/server.go): ждём ПЕРВОЕ завершившееся
+	// направление, после чего defer'ы закрывают обе стороны.
+	//
+	// Ждать оба направления (пробовалось) нельзя: у sing-tun conn — это поток
+	// системного стека, io.Copy на нём не разблокируется сам, и соединения
+	// зависали бы до таймаута.
+	copyErrCh := make(chan error, 2)
+	go func() { n, e := io.Copy(rc, conn); t.up.Add(n); copyErrCh <- e }()
+	go func() { n, e := io.Copy(conn, rc); t.down.Add(n); copyErrCh <- e }()
 	select {
 	case <-ctx.Done():
-	case <-errCh:
+	case <-copyErrCh:
 	}
 	return nil
 }
@@ -307,7 +324,10 @@ func (t *Tunnel) NewPacketConnection(ctx context.Context, conn N.PacketConn, m M
 		if pErr != nil {
 			continue
 		}
-		if wErr := conn.WritePacket(buf.With(data), M.SocksaddrFromNetIP(destAddr)); wErr != nil {
+		// buf.As, а НЕ buf.With: With создаёт буфер с end=0, то есть пустой —
+		// в TUN уходили бы датаграммы нулевой длины, и ответы (весь QUIC-трафик
+		// вроде YouTube) не доходили бы до приложений. As выставляет end=len(data).
+		if wErr := conn.WritePacket(buf.As(data), M.SocksaddrFromNetIP(destAddr)); wErr != nil {
 			return nil
 		}
 		t.down.Add(int64(len(data)))
