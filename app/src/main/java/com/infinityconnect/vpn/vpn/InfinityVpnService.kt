@@ -433,10 +433,17 @@ class InfinityVpnService : VpnService() {
     /** Периодически опрашивает статистику движка и обновляет состояние/уведомление. */
     private fun startStatsLoop(engine: VpnEngine) {
         statsJob?.cancel()
-        // Скорость = дельта суммарного трафика между замерами.
+        // Скорость = дельта суммарного трафика. Считаем её от ПОСЛЕДНЕГО замера,
+        // где счётчик реально изменился, а не от предыдущего тика: ядра
+        // обновляют свои счётчики реже, чем раз в секунду, и деление нулевой
+        // дельты на 1 с давало «0 Б/с» при живом трафике. Прошлые значения
+        // держим до следующего изменения — тогда дельта делится на реальный
+        // интервал между изменениями и скорость выходит правдивой.
         var prevUp = 0L
         var prevDown = 0L
         var prevMs = System.currentTimeMillis()
+        var lastUpSpeed = 0L
+        var lastDownSpeed = 0L
         statsJob = scope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
@@ -444,10 +451,22 @@ class InfinityVpnService : VpnService() {
                 val raw = engine.queryStats()
                 val totalUp = raw?.totalUploadBytes ?: 0
                 val totalDown = raw?.totalDownloadBytes ?: 0
-                val dtSec = ((now - prevMs) / 1000.0).coerceAtLeast(0.001)
-                val upSpeed = ((totalUp - prevUp).coerceAtLeast(0) / dtSec).toLong()
-                val downSpeed = ((totalDown - prevDown).coerceAtLeast(0) / dtSec).toLong()
-                prevUp = totalUp; prevDown = totalDown; prevMs = now
+
+                val changed = totalUp != prevUp || totalDown != prevDown
+                if (changed) {
+                    val dtSec = ((now - prevMs) / 1000.0).coerceAtLeast(0.001)
+                    lastUpSpeed = ((totalUp - prevUp).coerceAtLeast(0) / dtSec).toLong()
+                    lastDownSpeed = ((totalDown - prevDown).coerceAtLeast(0) / dtSec).toLong()
+                    prevUp = totalUp
+                    prevDown = totalDown
+                    prevMs = now
+                } else if (now - prevMs > SPEED_IDLE_RESET_MS) {
+                    // Трафика давно нет — показываем ноль, а не последнюю скорость.
+                    lastUpSpeed = 0
+                    lastDownSpeed = 0
+                }
+                val upSpeed = lastUpSpeed
+                val downSpeed = lastDownSpeed
 
                 stateHolder.updateStats(
                     TunnelStats(
@@ -622,6 +641,13 @@ class InfinityVpnService : VpnService() {
         private const val DNS_PRIMARY = "1.1.1.1"
         private const val DNS_SECONDARY = "8.8.8.8"
         private const val STATS_INTERVAL_MS = 1000L
+
+        /**
+         * Через сколько простоя (счётчики не менялись) показывать нулевую
+         * скорость. Больше интервала опроса, иначе редкие обновления счётчиков
+         * ядра снова выглядели бы как «трафика нет».
+         */
+        private const val SPEED_IDLE_RESET_MS = 3000L
 
         /** requestCode отложенной команды CONNECT при перезапуске под другое ядро. */
         private const val REQUEST_RESTART = 1001

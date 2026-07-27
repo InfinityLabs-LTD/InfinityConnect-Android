@@ -44,6 +44,13 @@ class XrayCoreBridge(
      */
     private var errorLogFile: File? = null
     private var errorLogOffset = 0L
+
+    /**
+     * Накопленный трафик за сессию. Ядро при каждом чтении статистики отдаёт
+     * только прирост и обнуляет свои счётчики, поэтому сумму держим здесь.
+     */
+    private var totalUp = 0L
+    private var totalDown = 0L
     private var drainJob: Job? = null
     private val drainScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -73,6 +80,9 @@ class XrayCoreBridge(
      * @throws Exception при ошибке запуска (перехватывается движком → Error).
      */
     fun start(configJson: String, tunFd: Int, errorLog: File? = null) {
+        // Новая сессия — новый счёт трафика.
+        totalUp = 0
+        totalDown = 0
         // Стартуем с чистого файла: иначе в журнал уехал бы лог прошлой сессии.
         errorLog?.let { file ->
             runCatching { if (file.exists()) file.delete() }
@@ -151,13 +161,21 @@ class XrayCoreBridge(
     }
 
     /**
-     * Суммарный трафик аутбаунда "proxy" (uplink+downlink) в байтах, либо -1.
-     * Формат queryAllOutboundTrafficStats: "tag,direction,value;...".
+     * Накопленный трафик аутбаунда "proxy" (uplink, downlink) в байтах, либо null.
+     *
+     * Важно: `queryAllOutboundTrafficStats` отдаёт НЕ суммарные значения, а
+     * прирост с момента прошлого вызова — счётчики ядра при чтении сбрасываются
+     * (видно по логам: downlink 5669 → 5631 → 40816). Поэтому накапливаем сами;
+     * иначе вызывающий, считая дельту от дельты, получал мусор и нули.
+     *
+     * Формат строки: "tag,direction,value;...".
      */
     fun queryProxyTraffic(): Pair<Long, Long>? {
         val ctrl = controller ?: return null
         val raw = runCatching { ctrl.queryAllOutboundTrafficStats() }.getOrNull() ?: return null
-        if (raw.isBlank()) return null
+        // Пустая строка = с прошлого раза прироста не было. Это не «нет данных»:
+        // возвращаем накопленное, иначе счётчик в UI мигал бы нулями.
+        if (raw.isBlank()) return totalUp to totalDown
         var up = 0L
         var down = 0L
         for (entry in raw.split(';')) {
@@ -170,7 +188,9 @@ class XrayCoreBridge(
                 "downlink" -> down += value
             }
         }
-        return up to down
+        totalUp += up
+        totalDown += down
+        return totalUp to totalDown
     }
 
     /**

@@ -52,8 +52,8 @@ import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.theme.LocalInfinityGradients
 import com.infinityconnect.vpn.domain.model.KeyStatus
 import com.infinityconnect.vpn.domain.model.status
+import com.infinityconnect.vpn.ui.util.formatBytes
 import com.infinityconnect.vpn.ui.util.formatDuration
-import com.infinityconnect.vpn.ui.util.formatSpeed
 import com.infinityconnect.vpn.ui.util.isExpired
 import com.infinityconnect.vpn.vpn.TunnelState
 import kotlinx.coroutines.launch
@@ -525,8 +525,11 @@ private fun StatsRow(stats: com.infinityconnect.vpn.vpn.TunnelStats) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        StatTile("↓ Скачано", formatSpeed(stats.downloadBytesPerSec), Modifier.weight(1f))
-        StatTile("↑ Отдано", formatSpeed(stats.uploadBytesPerSec), Modifier.weight(1f))
+        // Объём за сессию, а не скорость: плитки подписаны «Скачано»/«Отдано».
+        // Скорость в подписи — мгновенная дельта, она часто нулевая (ядра
+        // обновляют счётчики реже, чем раз в секунду) и выглядела как «трафика нет».
+        StatTile("↓ Скачано", formatBytes(stats.totalDownloadBytes), Modifier.weight(1f))
+        StatTile("↑ Отдано", formatBytes(stats.totalUploadBytes), Modifier.weight(1f))
         StatTile("Время", formatDuration(stats.sessionSeconds), Modifier.weight(1f))
     }
 }
