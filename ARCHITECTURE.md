@@ -86,7 +86,7 @@ HomeScreen (кнопка Connect)
 | `settings/LogsScreen.kt` + `LogsViewModel.kt` | Экран «Логи»: журнал приложения, VPN-сервиса и ядер (включая записи прошлых сессий и крашей), фильтр по уровню, автопрокрутка, очистка и отправка файлом через FileProvider (`cacheDir/logs`). | LogStore |
 | `settings/AboutScreen.kt` | Экран «О приложении» (версия, ядра, разработчик) + карточка «Обновление» (проверить/скачать/установить APK; автопроверка при открытии). | BuildConfig/BuildFlags, AboutViewModel |
 | `settings/AboutViewModel.kt` | VM обновления клиента: check → download (прогресс) → ApkInstaller. | CheckClientUpdate/DownloadClientUpdate usecase |
-| `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app (общий VM через backstack-entry SETTINGS). | SettingsViewModel |
+| `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app (общий VM через backstack-entry SETTINGS). Список приходит порциями из `SettingsViewModel.loadApps`: спиннер по центру только до первой порции, дальше — индикатор дозагрузки в хвосте `LazyColumn`. | SettingsViewModel |
 | `settings/SettingsCommon.kt` | Общие Compose-элементы экранов настроек (SettingsScaffold/SectionTitle/OptionRow/fieldColors). | — |
 | `settings/PingMethodUi.kt` | UI-модель метода пинга. | domain.model.PingMethod |
 | `components/Common.kt`, `components/Design.kt` | Переиспользуемые Compose-виджеты. | — |
@@ -251,6 +251,12 @@ enabled`) — в любом порядке. Повторный запуск ТО
   Изменение настроек маршрутизации при активном туннеле применяется «на лету»:
   `SettingsViewModel.scheduleTunnelRestart` (дебаунс 1.5 с) переподключает туннель
   к тому же серверу через `VpnStateHolder.activeConnection`.
+  *Список приложений* строится в `SettingsViewModel.loadApps`: один
+  `getInstalledPackages(GET_PERMISSIONS)`, отбор только пакетов с разрешением
+  `INTERNET` (остальные для VPN бессмысленны и составляют основную массу системных),
+  затем параллельное чтение меток порциями по 40 с публикацией по мере готовности.
+  Узкое место — именно `getApplicationLabel` (парсинг ресурсов чужого APK через IPC):
+  последовательный проход по всем пакетам на «тяжёлых» устройствах занимал минуты.
 - **Самообновление (как Windows-клиент):** та же серверная система `/v1/client-updates/*`
   (client_updates.py в проекте InfinityConnect), платформа `android`, «арка» — `apk`
   (universal APK). Проверка — `GET android/apk/latest?current={versionName}&code={versionCode}`,

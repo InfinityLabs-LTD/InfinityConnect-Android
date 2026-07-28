@@ -1,7 +1,9 @@
 package com.infinityconnect.vpn.ui.settings
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinityconnect.vpn.data.local.SettingsStore
@@ -23,6 +25,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -81,6 +85,12 @@ class SettingsViewModel @Inject constructor(
     /** Кэш списка установленных приложений (грузится один раз по требованию). */
     private val _apps = MutableStateFlow<List<InstalledApp>>(emptyList())
     val apps: StateFlow<List<InstalledApp>> = _apps.asStateFlow()
+
+    /** true, пока идёт разбор пакетов: список наполняется порциями и ещё неполон. */
+    private val _appsLoading = MutableStateFlow(false)
+    val appsLoading: StateFlow<Boolean> = _appsLoading.asStateFlow()
+
+    private var appsJob: Job? = null
 
     private var rulesUrlEdited = false
     private var pingUrlEdited = false
@@ -192,25 +202,64 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { routingRepository.setApps(next); scheduleTunnelRestart() }
     }
 
-    /** Лениво загружает список установленных приложений (тяжёлая операция → IO). */
+    /**
+     * Лениво загружает список установленных приложений.
+     *
+     * Тяжёлая часть — не перечисление пакетов, а [PackageManager.getApplicationLabel]:
+     * каждый вызов открывает и парсит ресурсы чужого APK через IPC. На устройстве с
+     * сотнями пакетов последовательный проход занимал десятки секунд (а на медленном
+     * хранилище — минуты). Поэтому:
+     *  - отбрасываем пакеты без разрешения INTERNET (для VPN они бессмысленны) — это
+     *    убирает основную массу служебных системных пакетов ещё до чтения меток;
+     *  - метки читаем параллельно на [Dispatchers.IO] (операция IO-bound, не CPU-bound);
+     *  - результат отдаём порциями, чтобы список появлялся сразу и наполнялся на глазах.
+     */
     fun loadApps() {
-        if (_apps.value.isNotEmpty()) return
-        viewModelScope.launch {
-            val list = withContext(Dispatchers.IO) {
+        if (_apps.value.isNotEmpty() || appsJob?.isActive == true) return
+        _appsLoading.value = true
+        appsJob = viewModelScope.launch {
+            try {
                 val pm = appContext.packageManager
-                pm.getInstalledApplications(0)
-                    .filter { it.packageName != appContext.packageName }
-                    // Оставляем приложения с интернетом — остальные бессмысленны для VPN.
-                    .map {
-                        InstalledApp(
-                            packageName = it.packageName,
-                            label = pm.getApplicationLabel(it).toString(),
-                            isSystem = (it.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                        )
+                // Один IPC-вызов вместо getInstalledApplications + N × getPackageInfo:
+                // requestedPermissions приходит сразу для всех пакетов.
+                val packages = withContext(Dispatchers.IO) {
+                    runCatching {
+                        pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
+                    }.getOrDefault(emptyList())
+                }
+
+                val candidates = packages.filter { pkg ->
+                    val info = pkg.applicationInfo ?: return@filter false
+                    if (pkg.packageName == appContext.packageName) return@filter false
+                    pkg.requestedPermissions?.contains(Manifest.permission.INTERNET) == true &&
+                        info.enabled
+                }
+
+                val collected = ArrayList<InstalledApp>(candidates.size)
+                // Порции: параллельно читаем метки и сразу публикуем то, что готово.
+                candidates.chunked(APPS_CHUNK).forEach { chunk ->
+                    val part = withContext(Dispatchers.IO) {
+                        chunk.map { pkg ->
+                            async {
+                                val info = pkg.applicationInfo!!
+                                val label = runCatching { pm.getApplicationLabel(info).toString() }
+                                    .getOrNull()
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: pkg.packageName
+                                InstalledApp(
+                                    packageName = pkg.packageName,
+                                    label = label,
+                                    isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                                )
+                            }
+                        }.awaitAll()
                     }
-                    .sortedWith(compareBy({ it.isSystem }, { it.label.lowercase() }))
+                    collected += part
+                    _apps.value = collected.sortedWith(APPS_ORDER)
+                }
+            } finally {
+                _appsLoading.value = false
             }
-            _apps.update { list }
         }
     }
 
@@ -286,5 +335,11 @@ class SettingsViewModel @Inject constructor(
     private companion object {
         /** Пауза перед переподключением после последнего изменения настроек. */
         const val RESTART_DEBOUNCE_MS = 1500L
+
+        /** Размер порции пакетов, метки которых читаются параллельно и публикуются разом. */
+        const val APPS_CHUNK = 40
+
+        /** Пользовательские приложения сверху, дальше по алфавиту. */
+        val APPS_ORDER = compareBy<InstalledApp>({ it.isSystem }, { it.label.lowercase() })
     }
 }

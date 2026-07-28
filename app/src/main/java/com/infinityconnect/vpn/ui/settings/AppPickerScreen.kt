@@ -51,6 +51,7 @@ fun AppPickerScreen(
     onBack: () -> Unit,
 ) {
     val apps by viewModel.apps.collectAsStateWithLifecycle()
+    val loading by viewModel.appsLoading.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
 
@@ -91,22 +92,47 @@ fun AppPickerScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             )
 
-            if (apps.isEmpty()) {
-                Column(
+            when {
+                // Спиннер только пока не пришла ни одна порция: дальше список
+                // отображается и достраивается на глазах.
+                apps.isEmpty() && loading -> Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     CircularProgressIndicator(color = InfinityColors.AccentBlue)
                 }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+
+                apps.isEmpty() -> Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = "Приложения не найдены",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = InfinityColors.Muted,
+                    )
+                }
+
+                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(filtered, key = { it.packageName }) { app ->
                         AppRow(
                             app = app,
                             checked = ui.selectedApps.contains(app.packageName),
                             onToggle = { viewModel.toggleApp(app.packageName) },
                         )
+                    }
+                    // Индикатор дозагрузки в хвосте списка.
+                    if (loading) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                CircularProgressIndicator(color = InfinityColors.AccentBlue)
+                            }
+                        }
                     }
                 }
             }
