@@ -83,12 +83,26 @@ implementation(files("libs/libv2ray.aar"))
 
 Требуется: **Go 1.24+**, **Android NDK** (r27b проверен), **JDK 17+**.
 
+> ⚠️ **Собирать ЧИСТЫМ gomobile, не патченным для Hysteria2.** Если на машине
+> уже стоит тулчейн из `hysteria2-mobile/apply-toolchain-patch.sh`, в
+> `~/go/bin/gomobile` лежит патченная версия: она соберёт Xray как hy2-рантайм
+> (`libhy2gojni.so` + version-script `hy2_exports.map`) и подставит свой
+> `-ldflags`, перебив `-checklinkname=0` — сборка упадёт на
+> `link: github.com/wlynxg/anet: invalid reference to net.zoneCache`.
+> Поэтому ставим чистый gomobile в отдельный GOBIN и кладём его первым в PATH.
+
 ```bash
-# 1. gomobile
+# 1. чистый gomobile в отдельный GOBIN (не перетирает глобальный hy2-патченный)
+export GOBIN=/tmp/cleanbin
 go install golang.org/x/mobile/cmd/gomobile@latest
+go install golang.org/x/mobile/cmd/gobind@latest
+export PATH="$GOBIN:$PATH"   # обязательно ПЕРЕД ~/go/bin
+# ...и всё равно вызывать по АБСОЛЮТНОМУ пути ($GOBIN/gomobile): в Git Bash на
+# Windows правки PATH внутри скрипта не всегда перебивают ~/go/bin/gomobile.exe.
+# Проверка: `gomobile version` должен печатать путь из $GOBIN, не из ~/go/bin.
 
 # 2. исходники (тег актуальной версии)
-git clone --depth 1 --branch v26.7.5 https://github.com/2dust/AndroidLibXrayLite.git
+git clone --depth 1 --branch v26.7.28 https://github.com/2dust/AndroidLibXrayLite.git
 cd AndroidLibXrayLite
 
 # 3. окружение
@@ -98,12 +112,22 @@ export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006
 # 4. подготовка и сборка
 go mod tidy
 gomobile init
-# ВАЖНО: -ldflags=-checklinkname=0 обходит несовместимость зависимости
-# wlynxg/anet (//go:linkname net.zoneCache) с Go 1.23+.
-gomobile bind -target=android -androidapi 26 -ldflags="-checklinkname=0" -o libv2ray.aar .
+# ВАЖНО, два флага в одном -ldflags:
+#  * -checklinkname=0 обходит несовместимость зависимости wlynxg/anet
+#    (//go:linkname net.zoneCache) с Go 1.23+;
+#  * -extldflags=-Wl,-z,max-page-size=16384 даёт 16КБ-выравнивание LOAD-сегментов.
+#    БЕЗ него gomobile выравнивает на 4КБ, и Android 15+ показывает
+#    "PageSizeMismatchDialog", а на устройствах с 16КБ-страницами .so не грузится.
+gomobile bind -target=android -androidapi 26 \
+  -ldflags="-checklinkname=0 -extldflags=-Wl,-z,max-page-size=16384" \
+  -o libv2ray.aar .
 
 # 5. подключение
 cp libv2ray.aar <проект>/app/libs/libv2ray.aar
+
+# 6. проверка выравнивания (должно быть 0x4000, не 0x1000):
+#    unzip -o libv2ray.aar jni/arm64-v8a/libgojni.so
+#    llvm-readelf --program-headers jni/arm64-v8a/libgojni.so | grep -A1 LOAD
 ```
 
 API моста (`libv2ray.CoreController`, `Libv2ray.newCoreController`, `go.Seq`) —

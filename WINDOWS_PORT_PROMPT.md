@@ -111,7 +111,7 @@ infinity-connect-windows/
 - **`sidecar/`** — запуск `xray.exe`/`hysteria.exe` с готовым конфигом (файл в темпе или
   stdin), менеджмент дочернего процесса (Tauri sidecar / `std::process`), чтение
   статистики через API-порт ядра (Xray stats API, hysteria traffic API). Версии ядер —
-  синхронно с Android `BuildFlags` (Xray 26.3.27, Hy2 2.x).
+  синхронно с Android `BuildFlags` (Xray 26.7.28, Hy2 2.x).
 - **`ping/`** — 4 метода как в Happ: прокси (GET/HEAD через локальный SOCKS-inbound
   временного sidecar), TCP, ICMP + режимы Default/Double/Keepalive + таймаут. Замеры
   сериализованы. Схема — из Android `PingServerUseCase`/`XrayProxyPinger`.
