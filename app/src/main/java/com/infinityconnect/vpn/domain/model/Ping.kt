@@ -29,7 +29,7 @@ enum class PingMethod {
 
     companion object {
         fun from(raw: String?): PingMethod =
-            entries.firstOrNull { it.name == raw } ?: TCP
+            entries.firstOrNull { it.name == raw } ?: PROXY_GET
     }
 }
 
@@ -67,13 +67,14 @@ enum class PingMode {
 /**
  * Настройки измерения пинга.
  *
- * @param method активный протокол.
+ * @param method активный протокол (по умолчанию прокси-GET: меряет end-to-end
+ *   задержку через сам протокол сервера, а не только доступность узла).
  * @param mode режим прокси-пинга (via …); влияет только на прокси-методы.
  * @param testUrl URL для прокси-методов (по умолчанию gstatic 204).
  * @param timeoutSec таймаут прокси-пинга в секундах (5..15).
  */
 data class PingSettings(
-    val method: PingMethod = PingMethod.TCP,
+    val method: PingMethod = PingMethod.PROXY_GET,
     val mode: PingMode = PingMode.DEFAULT,
     val testUrl: String = DEFAULT_TEST_URL,
     val timeoutSec: Int = DEFAULT_TIMEOUT_SEC,

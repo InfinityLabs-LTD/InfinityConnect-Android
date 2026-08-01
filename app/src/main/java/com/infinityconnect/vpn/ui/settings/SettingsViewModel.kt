@@ -64,7 +64,7 @@ data class SettingsUiState(
     val sitesText: String = "",
     val sitePresets: Set<SitePreset> = emptySet(),
     // Пинг
-    val pingMethod: PingMethod = PingMethod.TCP,
+    val pingMethod: PingMethod = PingMethod.PROXY_GET,
     val pingMode: PingMode = PingMode.DEFAULT,
     val pingUrl: String = PingSettings.DEFAULT_TEST_URL,
     val pingTimeoutSec: Int = PingSettings.DEFAULT_TIMEOUT_SEC,

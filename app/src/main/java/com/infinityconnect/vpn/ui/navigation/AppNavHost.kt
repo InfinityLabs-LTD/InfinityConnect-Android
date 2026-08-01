@@ -79,9 +79,9 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             )
         }
 
-        composable(Routes.PROFILE) {
+        composable(Routes.PROFILE) { entry ->
             ProfileScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce(entry) },
                 onLoggedOut = {
                     navController.navigate(Routes.AUTH) {
                         popUpTo(0) { inclusive = true }
@@ -93,7 +93,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         // Настройки — хаб-меню из отдельных пунктов.
         composable(Routes.SETTINGS) { entry ->
             SettingsScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce(entry) },
                 onOpenRouting = { navController.navigateOnce(entry, Routes.ROUTING) },
                 onOpenPing = { navController.navigateOnce(entry, Routes.PING) },
                 onOpenLogs = { navController.navigateOnce(entry, Routes.LOGS) },
@@ -104,7 +104,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         composable(Routes.ROUTING) { entry ->
             RoutingScreen(
                 viewModel = sharedSettingsVm(navController, entry),
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce(entry) },
                 onOpenAppPicker = { navController.navigateOnce(entry, Routes.APP_PICKER) },
             )
         }
@@ -112,22 +112,22 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
         composable(Routes.PING) { entry ->
             PingScreen(
                 viewModel = sharedSettingsVm(navController, entry),
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce(entry) },
             )
         }
 
-        composable(Routes.ABOUT) {
-            AboutScreen(onBack = { navController.popBackStack() })
+        composable(Routes.ABOUT) { entry ->
+            AboutScreen(onBack = { navController.popOnce(entry) })
         }
 
-        composable(Routes.LOGS) {
-            LogsScreen(onBack = { navController.popBackStack() })
+        composable(Routes.LOGS) { entry ->
+            LogsScreen(onBack = { navController.popOnce(entry) })
         }
 
         composable(Routes.APP_PICKER) { entry ->
             AppPickerScreen(
                 viewModel = sharedSettingsVm(navController, entry),
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popOnce(entry) },
             )
         }
     }
@@ -148,6 +148,21 @@ private fun NavHostController.navigateOnce(
 ) {
     if (from.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
         navigate(route)
+    }
+}
+
+/**
+ * Возврат назад, устойчивый к двойному тапу — зеркало [navigateOnce].
+ *
+ * Голый popBackStack() при быстром переключении (профиль → назад → профиль,
+ * либо два тапа по стрелке подряд) успевал сработать дважды: второй вызов
+ * приходил, когда экран уже не RESUMED, и снимал со стека ЛИШНИЙ экран —
+ * вплоть до опустошения графа. NavHost оставался без текущего destination и
+ * рисовал только фон приложения (пустой экран с сеткой и точками).
+ */
+private fun NavHostController.popOnce(from: androidx.navigation.NavBackStackEntry) {
+    if (from.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+        popBackStack()
     }
 }
 

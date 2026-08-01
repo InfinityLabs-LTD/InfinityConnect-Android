@@ -71,7 +71,7 @@ HomeScreen (кнопка Connect)
 | `MainActivity.kt` | Точка входа Activity, хостит `AppNavHost`. | → navigation |
 | `InfinityApp.kt` (в корне пакета) | `@HiltAndroidApp`-класс приложения. | Hilt-граф |
 | `SplashViewModel.kt` | Стартовый роутинг: discovery → AUTH/HOME/ERROR. | DiscoveryRepository, AuthRepository |
-| `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/ROUTING/PING/LOGS/ABOUT; SETTINGS-хаб остаётся, но главная навигация — боковое меню). `sharedSettingsVm` привязывает VM настроек к SETTINGS либо (при прямом переходе из меню) к HOME. | все экраны |
+| `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/ROUTING/PING/LOGS/ABOUT; SETTINGS-хаб остаётся, но главная навигация — боковое меню). `sharedSettingsVm` привязывает VM настроек к SETTINGS либо (при прямом переходе из меню) к HOME. Переходы идут через `navigateOnce`/`popOnce` (проверка RESUMED) — иначе быстрые переключения дублируют или опустошают бэкстек, и экран схлопывается в пустой фон. | все экраны |
 | `navigation/Routes.kt` | Константы маршрутов. | — |
 | `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). Обёрнут в `ModalNavigationDrawer` — гамбургер открывает боковое меню. | HomeViewModel |
 | `home/AppDrawer.kt` | Боковое меню в стиле сайдбара Windows-клиента: лого, пункты-«пилюли» (активный — акцентный градиент; ⚡ Подключение / 🧭 Маршрутизация / 📶 Пинг / 👤 Профиль / ℹ️ О приложении), статус туннеля внизу. | — |
@@ -112,7 +112,7 @@ HomeScreen (кнопка Connect)
 | `subscription/UriParsing.kt` | Общие хелперы разбора URI. | — |
 | `model/Models.kt` | Доменные модели (VpnKey, ServerEntry, UserInfo, SubscriptionServer, VpnProtocol …). | — |
 | `model/Result.kt` | `AppResult`/`AppError` (Success/Failure). | — везде |
-| `model/Ping.kt` | `PingMethod` (Прокси GET/HEAD/TCP/ICMP), `PingMode` (Default/Double/Keepalive), `PingSettings` (метод+режим+URL+таймаут). Схема как в Happ. | — |
+| `model/Ping.kt` | `PingMethod` (Прокси GET/HEAD/TCP/ICMP, **по умолчанию PROXY_GET**), `PingMode` (Default/Double/Keepalive), `PingSettings` (метод+режим+URL+таймаут). Схема как в Happ. | — |
 | `model/Routing.kt` | Модель настроек маршрутизации. | — |
 | `repository/Repositories.kt` | **Интерфейсы:** Discovery/Auth/User/Keys/Config Repository. | реализации в data/ |
 | `repository/RoutingRepository.kt` | Интерфейс настроек маршрутизации. | RoutingRepositoryImpl |

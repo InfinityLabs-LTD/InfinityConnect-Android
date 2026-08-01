@@ -53,7 +53,7 @@ data class HomeUiState(
     val pinging: Boolean = false,
     /** Активный метод пинга — от него зависит цвет пинг-пилла. */
     val pingMethod: com.infinityconnect.vpn.domain.model.PingMethod =
-        com.infinityconnect.vpn.domain.model.PingMethod.TCP,
+        com.infinityconnect.vpn.domain.model.PingMethod.PROXY_GET,
     val refreshing: Boolean = false,
     val loadingFirstTime: Boolean = true,
     val error: String? = null,
