@@ -34,6 +34,7 @@ private val Context.dataStore by preferencesDataStore(name = "infinity_settings"
 class SettingsStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val json: Json,
+    private val crypto: SecretCrypto,
 ) {
     val domain: Flow<String?> = context.dataStore.data.map { it[KEY_DOMAIN] }
 
@@ -178,13 +179,31 @@ class SettingsStore @Inject constructor(
         context.dataStore.edit { it[KEY_DISCOVERY] = json.encodeToString(dto) }
     }
 
-    /** Персист списка ключей (сырой JSON ответа /v1/keys) для офлайн-старта. */
+    /**
+     * Персист списка ключей (сырой JSON ответа /v1/keys) для офлайн-старта.
+     *
+     * Значение ШИФРУЕТСЯ ([SecretCrypto], AES-256/GCM на ключе Keystore): в ответе
+     * /v1/keys лежат `subscription_url` — фактические учётные данные доступа к
+     * подпискам, а DataStore хранит их на диске открытым текстом. Остальные
+     * настройки не секретны и шифрования не требуют.
+     */
     suspend fun saveKeysJson(raw: String) {
-        context.dataStore.edit { it[KEY_KEYS_JSON] = raw }
+        val payload = crypto.encrypt(raw)
+        context.dataStore.edit { it[KEY_KEYS_JSON] = payload }
     }
 
-    /** Сохранённый JSON ключей (или null) — читается при холодном старте. */
-    suspend fun currentKeysJson(): String? = context.dataStore.data.first()[KEY_KEYS_JSON]
+    /**
+     * Сохранённый JSON ключей (или null) — читается при холодном старте.
+     *
+     * Значения, записанные версиями до шифрования, читаются как есть и лягут
+     * зашифрованными при следующем [saveKeysJson] (первый же успешный sync) —
+     * пользователь не теряет офлайн-список серверов при обновлении приложения.
+     * Если ключ Keystore инвалидирован (смена блокировки экрана / восстановление
+     * из бэкапа), [SecretCrypto.decrypt] вернёт null — кэш считается отсутствующим,
+     * и ключи подтянутся из сети, вместо падения на старте.
+     */
+    suspend fun currentKeysJson(): String? =
+        context.dataStore.data.first()[KEY_KEYS_JSON]?.let { crypto.decrypt(it) }
 
     /** Синхронное чтение кэша discovery при инициализации (может быть null). */
     suspend fun currentDiscovery(): DiscoveryDto? = discoveryJson.first()

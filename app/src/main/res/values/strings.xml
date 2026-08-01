@@ -7,6 +7,8 @@
     <string name="tile_connecting">Подключение…</string>
     <string name="tile_disconnecting">Отключение…</string>
     <string name="tile_error">Ошибка</string>
+    <!-- Соединение разорвано, но kill-switch держит TUN: трафик заблокирован. -->
+    <string name="tile_blocked">Трафик заблокирован</string>
 
     <!-- ================= Общее ================= -->
     <string name="common_back">Назад</string>

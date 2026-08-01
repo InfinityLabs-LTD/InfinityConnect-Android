@@ -138,6 +138,7 @@ HomeScreen (кнопка Connect)
 | `local/SubscriptionCacheStore.kt` | **Офлайн-кэш тел подписок на диске.** | SubscriptionRepositoryImpl |
 | `local/LogStore.kt` | **Постоянный журнал** приложения и ядер: очередь → файлы `filesDir/logs` (`current.log` + ротация в `prev.log`, ~2 МБ), запись пачками с `flush`+`fd.sync` — переживает краш и убийство процесса. Хвост в памяти отдаётся экрану логов; `flushBlocking()` — для обработчика крашей. | InfinityApp, VpnService, оба движка и моста, LogsViewModel |
 | `local/TokenStorage.kt`, `KeystoreTokenProvider.kt` | Хранение токенов (шифрование Keystore). Разлогин — только при явном отказе сервера (401/403 на refresh); сетевые сбои и 5xx сессию не рвут (`lastRefreshRejected`). | TokenAuthenticator |
+| `local/SecretCrypto.kt` | **Шифрование локальных секретов** (AES-256/GCM на ключе Keystore) для кэша ключей и тел подписок — там лежат `subscription_url` и VLESS-URI с UUID. Формат `enc1:`+Base64(IV‖ct); значения без маркера читаются как плоские (миграция со старых версий). Не бросает: при недоступном Keystore деградирует к прежнему поведению. | SettingsStore, SubscriptionCacheStore |
 | `local/SessionState.kt`, `DeviceIdProvider.kt` | Сессия, device id (HWID для подписки). | — |
 
 ### `di/` — Hilt-модули
@@ -152,8 +153,9 @@ HomeScreen (кнопка Connect)
 
 | Файл | За что отвечает | Связи |
 |---|---|---|
-| `InfinityVpnService.kt` | **Foreground `VpnService`:** TUN, команды CONNECT/DISCONNECT, статистика, уведомление, per-app split-tunnel, слежение за сетью (`registerDefaultNetworkCallback` + `setUnderlyingNetworks` — туннель переживает Wi-Fi ↔ мобильный). | BuildConnectionUseCase, EngineSelector, VpnStateHolder, RoutingRepository |
+| `InfinityVpnService.kt` | **Foreground `VpnService`:** TUN (IPv4 + IPv6 — маршрут `::/0` обязателен, иначе IPv6 течёт мимо туннеля), команды CONNECT/DISCONNECT, статистика, уведомление, per-app split-tunnel, слежение за сетью (`registerDefaultNetworkCallback` + `setUnderlyingNetworks` — туннель переживает Wi-Fi ↔ мобильный). **Kill-switch** (`KILL_SWITCH_ENABLED`): при аварийном обрыве TUN остаётся поднятым, чтобы трафик не пошёл мимо VPN — процесс при этом НЕ завершается. **Сторожа:** `CONNECT_TIMEOUT_MS` (зависшее подключение) и `NETWORK_LOSS_TIMEOUT_MS` (долгая потеря сети). `onRevoke()` — снятие туннеля при отзыве разрешения системой. | BuildConnectionUseCase, EngineSelector, VpnStateHolder, RoutingRepository |
 | `VpnController.kt` | Фасад для UI: шлёт Intent'ы сервису, `prepareIntent()` разрешения. | InfinityVpnService |
+| `VpnTileService.kt` | **Плитка быстрых настроек** (шторка): состояние туннеля + подключение последнего сервера одним тапом. Живёт в UI-процессе (без `android:process`); при пустом holder'е (холодный старт) факт работы туннеля проверяет через `ActivityManager`. | VpnController, VpnStateHolder, SettingsStore |
 | `EngineSelector.kt` | Выбор движка по `EngineConfig`: Vless/RawXray→Xray, Hy2→Hysteria2. | XrayEngine, Hysteria2Engine |
 | `VpnEngine.kt` | **Интерфейс движка** (`supports`/`start`/`stop`/`queryStats`). | реализации ниже |
 | `VpnStateHolder.kt` | Источник состояния/статистики туннеля (StateFlow). Singleton **на процесс**: в `:vpn` наполняется сервисом, в UI-процессе — из `VpnStateBridge`. | UI, сервис |

@@ -81,6 +81,28 @@ class InfinityVpnService : VpnService() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var sessionStartMs: Long = 0
 
+    /**
+     * TUN намеренно оставлен поднятым после аварии, движка за ним нет
+     * (см. [KILL_SWITCH_ENABLED]). Нужен, чтобы отличать «висящий» интерфейс от
+     * рабочего: пока флаг стоит, туннель трафик не передаёт, а только поглощает.
+     * @Volatile — выставляется из колбэков ядра/сети (чужие потоки).
+     */
+    @Volatile
+    private var tunHeldByKillSwitch = false
+
+    /**
+     * Сторож затянувшегося подключения ([CONNECT_TIMEOUT_MS]) и сторож
+     * длительной потери сети ([NETWORK_LOSS_TIMEOUT_MS]).
+     *
+     * Оба взводятся и снимаются из разных потоков (колбэк ConnectivityManager
+     * приходит на своём), поэтому доступ к ним синхронизирован по [timerLock]:
+     * без этого гонка «onLost взвёл / onAvailable отменил» могла оставить
+     * висящий job, который через полминуты убьёт живой туннель.
+     */
+    private var connectWatchdogJob: Job? = null
+    private var networkLossJob: Job? = null
+    private val timerLock = Any()
+
     override fun onCreate() {
         super.onCreate()
         // Сервис живёт в своём процессе (:vpn), поэтому его VpnStateHolder — не
@@ -141,6 +163,11 @@ class InfinityVpnService : VpnService() {
 
         logStore.i(TAG, "Подключение: keyId=$keyId, сервер=${serverName ?: "#$serverIndex"}")
 
+        // Сторож зависшего подключения: взводим ДО ухода в корутину, чтобы под
+        // таймаут попали и «залипшие» сетевые шаги (загрузка подписки, DNS),
+        // а не только запуск ядра. Снимется при успехе, ошибке или stopTunnel.
+        startConnectWatchdog()
+
         scope.launch {
             // Объявлен снаружи try: обработчику ошибок нужен протокол, чтобы
             // назвать в сообщении именно то ядро, которое не запустилось.
@@ -171,7 +198,15 @@ class InfinityVpnService : VpnService() {
                 // одного ядра) — гасим предыдущий, иначе его движок продолжит
                 // читать свой TUN, а дескриптор утечёт: establishTun() ниже
                 // перезапишет tunInterface, и закрыть старый будет уже некому.
-                releaseActiveTunnel()
+                //
+                // Этот же вызов освобождает «висящий» после kill-switch TUN:
+                // keepTun по умолчанию false, поэтому переподключение после
+                // аварии корректно закрывает старый интерфейс перед новым.
+                //
+                // keepWatchdog: сторож взведён в startTunnel и должен пережить
+                // эту зачистку — впереди establishTun и engine.start, самые
+                // долгие шаги, ради которых он и заводился.
+                releaseActiveTunnel(keepWatchdog = true)
 
                 val tun = establishTun(config) ?: run {
                     stopWithError("Не удалось создать TUN-интерфейс")
@@ -188,7 +223,10 @@ class InfinityVpnService : VpnService() {
                 // start() ядро может дёрнуть shutdown по ошибке запуска, и её
                 // разбирает catch ниже — иначе показали бы «Соединение разорвано»
                 // вместо настоящей причины.
-                val onCoreStopped = { if (tunnelEstablished) stopWithError("Соединение разорвано") }
+                // Обрыв рабочего туннеля — это авария, а не пользовательский
+                // disconnect, поэтому идём через kill-switch: движок гасим, но
+                // TUN оставляем поднятым, чтобы трафик не хлынул мимо VPN.
+                val onCoreStopped = { if (tunnelEstablished) failWithKillSwitch("Соединение разорвано") }
                 when (engine) {
                     is com.infinityconnect.vpn.vpn.xray.XrayEngine -> engine.onCoreStopped = onCoreStopped
                     is com.infinityconnect.vpn.vpn.hysteria2.Hysteria2Engine -> engine.onCoreStopped = onCoreStopped
@@ -211,6 +249,9 @@ class InfinityVpnService : VpnService() {
                 engine.start(this@InfinityVpnService, config, tunFd = tun.fd, mtu = MTU)
 
                 tunnelEstablished = true
+                // Туннель поднят — сторож зависшего подключения больше не нужен
+                // (иначе через 45 с он бы разобрал живое соединение).
+                cancelConnectWatchdog()
                 sessionStartMs = System.currentTimeMillis()
                 stateHolder.updateState(TunnelState.Connected)
                 updateNotification(config.remark, "Подключено")
@@ -245,16 +286,132 @@ class InfinityVpnService : VpnService() {
      * (dup) копию TUN-дескриптора и закрывает её в stop(); закрыть свой fd
      * раньше — значит оставить ядро читать уже закрытый интерфейс, а двойное
      * закрытие ловит fdsan (Android 12+) и роняет процесс.
+     *
+     * @param keepTun не закрывать TUN (режим kill-switch, см.
+     *   [KILL_SWITCH_ENABLED]). Движок останавливается в любом случае, так что
+     *   порядок «сначала движок, потом TUN» соблюдается и здесь: закрытие лишь
+     *   откладывается до явного disconnect/onDestroy/следующего CONNECT.
+     *   Интерфейс остаётся поднятым и поглощает трафик — маршруты на месте,
+     *   читателя нет, наружу мимо VPN ничего не уходит.
      */
-    private fun releaseActiveTunnel() {
+    /**
+     * @param keepWatchdog не снимать сторож подключения. Нужен ровно одному
+     *   вызову — тому, что гасит предыдущий туннель ВНУТРИ нового подключения
+     *   (переключение сервера). Там сторож обязан пережить зачистку: самая
+     *   долгая часть (establishTun + engine.start) идёт следом, и снятый здесь
+     *   таймаут оставил бы зависшее подключение навсегда в Connecting — то
+     *   есть ровно то, от чего сторож и защищает.
+     */
+    private fun releaseActiveTunnel(keepTun: Boolean = false, keepWatchdog: Boolean = false) {
         tunnelEstablished = false
+        if (!keepWatchdog) cancelConnectWatchdog()
+        cancelNetworkLossTimer()
         statsJob?.cancel()
         statsJob = null
         unregisterNetworkCallback()
         runCatching { activeEngine?.stop() }
         activeEngine = null
+        if (keepTun) {
+            // Дескриптор осознанно остаётся жить в tunInterface: его закроет
+            // следующий releaseActiveTunnel() без keepTun (disconnect, новый
+            // CONNECT) либо onDestroy. Помечаем флагом, чтобы UI/логи отличали
+            // «висящий» TUN от полностью снятого.
+            tunHeldByKillSwitch = true
+            logStore.w(
+                TAG,
+                "Kill-switch: движок остановлен, TUN оставлен поднятым — " +
+                    "трафик не пойдёт мимо VPN до явного отключения",
+            )
+            return
+        }
         runCatching { tunInterface?.close() }
         tunInterface = null
+        tunHeldByKillSwitch = false
+    }
+
+    /**
+     * Обрабатывает НЕОЖИДАННЫЙ обрыв: падение ядра или длительную потерю сети.
+     *
+     * В отличие от [stopWithError] (который снимает туннель целиком) здесь при
+     * включённом kill-switch TUN остаётся поднятым: пользователь видит ошибку,
+     * но трафик не начинает идти напрямую в обход VPN. Закроет интерфейс уже
+     * явный disconnect — там [stopTunnel] зовёт releaseActiveTunnel() без
+     * keepTun, — либо следующий CONNECT, либо onDestroy.
+     *
+     * Активное подключение НЕ сбрасываем в отличие от stopWithError: параметры
+     * сервера нужны, чтобы пользователь мог переподключиться одной кнопкой.
+     */
+    private fun failWithKillSwitch(message: String) {
+        logStore.e(TAG, "Аварийный обрыв: $message (kill-switch=$KILL_SWITCH_ENABLED)")
+        if (!KILL_SWITCH_ENABLED) {
+            stopWithError(message)
+            return
+        }
+        releaseActiveTunnel(keepTun = true)
+        stateHolder.updateState(TunnelState.Error(message))
+        // Уведомление оставляем и НЕ снимаем foreground: процесс обязан жить,
+        // пока держит открытый TUN, иначе система прибьёт его вместе с
+        // интерфейсом — и kill-switch перестанет что-либо защищать. По той же
+        // причине здесь нет stopSelf().
+        updateNotification("Infinity Connect", message)
+    }
+
+    /**
+     * Взводит сторож затянувшегося подключения. Если через [CONNECT_TIMEOUT_MS]
+     * туннель так и не поднялся, пользователь остался бы в Connecting навсегда —
+     * сообщаем об этом явно и снимаем попытку.
+     *
+     * Предыдущий сторож отменяется, чтобы быстрые переподключения не копили
+     * висящие job'ы (утечка + чужой таймаут, убивающий уже другой туннель).
+     */
+    private fun startConnectWatchdog() {
+        synchronized(timerLock) {
+            connectWatchdogJob?.cancel()
+            connectWatchdogJob = scope.launch {
+                delay(CONNECT_TIMEOUT_MS)
+                // Проверяем оба условия: состояние могло уйти в Error своим
+                // путём, а tunnelEstablished — единственный надёжный признак
+                // реально поднятого туннеля.
+                if (!tunnelEstablished && stateHolder.state.value == TunnelState.Connecting) {
+                    logStore.e(TAG, "Подключение не завершилось за ${CONNECT_TIMEOUT_MS / 1000} с")
+                    stopWithError(
+                        "Не удалось подключиться за ${CONNECT_TIMEOUT_MS / 1000} секунд. " +
+                            "Проверьте интернет или выберите другой сервер.",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun cancelConnectWatchdog() {
+        synchronized(timerLock) {
+            connectWatchdogJob?.cancel()
+            connectWatchdogJob = null
+        }
+    }
+
+    /**
+     * Взводит таймер длительной потери сети. Короткие провалы лечит хендовер
+     * (onAvailable отменит таймер), а вот [NETWORK_LOSS_TIMEOUT_MS] без единой
+     * сети — это уже мёртвый туннель, и держать «Подключено» нечестно.
+     */
+    private fun startNetworkLossTimer() {
+        synchronized(timerLock) {
+            if (networkLossJob?.isActive == true) return // уже тикает с прошлого onLost
+            networkLossJob = scope.launch {
+                delay(NETWORK_LOSS_TIMEOUT_MS)
+                if (tunnelEstablished) {
+                    failWithKillSwitch("Нет сети")
+                }
+            }
+        }
+    }
+
+    private fun cancelNetworkLossTimer() {
+        synchronized(timerLock) {
+            networkLossJob?.cancel()
+            networkLossJob = null
+        }
     }
 
     /**
@@ -347,6 +504,30 @@ class InfinityVpnService : VpnService() {
                 // Xray этот адрес не использует, лишним он ему не мешает.
                 runCatching { b.addAddress(TUN_ADDRESS_PEER, TUN_PEER_PREFIX) }
             }
+            .also { b ->
+                // Закрываем IPv6-утечку: без адреса и маршрута ::/0 весь
+                // IPv6-трафик на двустековой сети идёт МИМО туннеля с реальным
+                // IP пользователя (см. TUN_ADDRESS_V6). Адрес и маршрут ставим
+                // только вместе: маршрут без адреса на интерфейсе система
+                // отвергает, а адрес без маршрута ничего не заворачивает.
+                //
+                // runCatching обязателен: часть вендорских прошивок (и старые
+                // устройства с урезанным IPv6-стеком) бросают на addAddress/
+                // addRoute для IPv6. Терять из-за этого весь туннель нельзя —
+                // откатываемся на IPv4-only, но громко пишем в журнал, потому
+                // что в этом режиме IPv6 действительно течёт и при разборе
+                // жалоб на «видно мой IP» это первое, что надо знать.
+                runCatching {
+                    b.addAddress(TUN_ADDRESS_V6, TUN_PREFIX_V6)
+                    b.addRoute("::", 0)
+                }.onFailure {
+                    logStore.w(
+                        TAG,
+                        "IPv6 на TUN не поднялся (${it.message}) — туннель работает " +
+                            "в режиме IPv4-only, IPv6-трафик пойдёт мимо VPN",
+                    )
+                }
+            }
             .addDnsServer(DNS_PRIMARY)
             .addDnsServer(DNS_SECONDARY)
 
@@ -402,13 +583,23 @@ class InfinityVpnService : VpnService() {
             override fun onAvailable(network: Network) {
                 // default-сеть сменилась (Wi-Fi ↔ мобильный) — отдаём новую туннелю.
                 runCatching { setUnderlyingNetworks(arrayOf(network)) }
+                // Связь вернулась раньше таймаута — снимаем сторож потери сети,
+                // иначе он бы позже уронил уже восстановленный туннель.
+                cancelNetworkLossTimer()
                 logStore.i(TAG, "Сеть переключена на $network")
             }
 
             override fun onLost(network: Network) {
-                // Текущая сеть пропала. Не сбрасываем в null — ждём onAvailable
-                // следующей default-сети; система придержит пакеты до переключения.
+                // Текущая сеть пропала. Не сбрасываем underlying в null — ждём
+                // onAvailable следующей default-сети; система придержит пакеты
+                // до переключения, и короткий провал пользователь не заметит.
+                //
+                // Но «ждём» не может быть вечным: если сети нет дольше
+                // NETWORK_LOSS_TIMEOUT_MS, туннель мёртв, а статус всё ещё
+                // «Подключено». Взводим таймер — он переведёт состояние в
+                // ошибку (с сохранением TUN, если включён kill-switch).
                 logStore.w(TAG, "Сеть потеряна: $network")
+                startNetworkLossTimer()
             }
         }
         runCatching {
@@ -587,11 +778,52 @@ class InfinityVpnService : VpnService() {
         )
     }
 
+    /**
+     * Система отозвала VPN-разрешение: пользователь включил другой VPN
+     * (одновременно работает только один) или отключил наш в системных
+     * настройках. Наш TUN при этом уже недействителен.
+     *
+     * Без этого обработчика сервис ничего не замечал: движок продолжал крутиться
+     * на мёртвом дескрипторе, TUN не закрывался, а UI бодро показывал
+     * «Подключено» — пользователь считал себя под VPN, не будучи под ним.
+     *
+     * Состояние выставляем Error, а не reset: reset выглядел бы как штатное
+     * отключение по кнопке, и пользователь не понял бы, почему туннель вдруг
+     * пропал. Явный текст объясняет причину и подсказывает, что делать.
+     *
+     * Kill-switch здесь НЕ применяем: разрешение отозвано, интерфейс уже не наш,
+     * держать его бессмысленно (и невозможно) — снимаем туннель полностью.
+     *
+     * Вызывается системой на отдельном потоке (не на main), поэтому вся работа
+     * идёт через потокобезопасные пути: releaseActiveTunnel синхронизирует свои
+     * таймеры, stateHolder — на StateFlow, stopForeground/stopSelf безопасны.
+     */
+    override fun onRevoke() {
+        logStore.w(TAG, "VPN-разрешение отозвано системой (другой VPN или отключение в настройках)")
+        releaseActiveTunnel()
+        stateHolder.setActiveConnection(null)
+        stateHolder.updateState(
+            TunnelState.Error("VPN отключён системой (возможно, включён другой VPN)"),
+        )
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        // Здесь именно stopSelf(), а не stopIfNoNewerCommand(): отзыв разрешения
+        // не связан с очередью команд, и ждать «более свежей команды» нечего.
+        stopSelf()
+        super.onRevoke()
+    }
+
     override fun onDestroy() {
+        cancelConnectWatchdog()
+        cancelNetworkLossTimer()
         scope.cancel()
         unregisterNetworkCallback()
         runCatching { activeEngine?.stop() }
+        // Закрываем TUN в том числе «висящий» после kill-switch: процесс
+        // умирает, удерживать интерфейс больше нечем и незачем. Инвариант
+        // порядка соблюдён — engine.stop() выше.
         runCatching { tunInterface?.close() }
+        tunInterface = null
+        tunHeldByKillSwitch = false
         super.onDestroy()
     }
 
@@ -638,6 +870,32 @@ class InfinityVpnService : VpnService() {
          */
         private const val TUN_ADDRESS_PEER = "10.10.0.2"
         private const val TUN_PEER_PREFIX = 32
+
+        /**
+         * IPv6-адрес TUN и маршрут `::/0`.
+         *
+         * Зачем: без IPv6 на интерфейсе система оставляет весь IPv6-трафик вне
+         * туннеля — на двустековой сети (почти любой современный мобильный
+         * оператор и Wi-Fi) приложение ходит в интернет напрямую, и настоящий
+         * IP пользователя утекает мимо VPN, хотя UI показывает «Подключено».
+         * Это классическая IPv6-утечка, и «VPN включён» её маскирует.
+         *
+         * Как решаем: вешаем на интерфейс ULA-адрес (fd00::/8 — приватный
+         * диапазон, не маршрутизируемый в интернете, поэтому конфликт с реальной
+         * адресацией исключён) и заворачиваем в туннель дефолтный IPv6-маршрут.
+         * Дальше возможны два исхода, и оба безопасны:
+         *  - ядро умеет IPv6 (Xray/Hysteria2 через свой outbound) — трафик идёт
+         *    через туннель;
+         *  - ядро IPv6 не обслуживает — пакеты просто тонут в TUN, приложение
+         *    получает недоступность IPv6 и по Happy Eyeballs откатывается на
+         *    IPv4 через туннель. Утечки нет в любом случае.
+         *
+         * Префикс /128: адрес точечный, целую IPv6-сеть на интерфейсе описывать
+         * незачем — маршрутизацию задаёт отдельный addRoute("::", 0).
+         */
+        private const val TUN_ADDRESS_V6 = "fd00:1:1::1"
+        private const val TUN_PREFIX_V6 = 128
+
         private const val DNS_PRIMARY = "1.1.1.1"
         private const val DNS_SECONDARY = "8.8.8.8"
         private const val STATS_INTERVAL_MS = 1000L
@@ -657,5 +915,47 @@ class InfinityVpnService : VpnService() {
          * как процесс :vpn умер, иначе система доставит её в старый рантайм.
          */
         private const val RESTART_DELAY_MS = 600L
+
+        /**
+         * Kill-switch: не закрывать TUN при НЕОЖИДАННОМ обрыве (падение ядра,
+         * длительная потеря сети), пока пользователь сам не нажмёт «Отключить».
+         *
+         * Зачем: закрытый TUN снимает маршрут по умолчанию, и трафик мгновенно
+         * уходит в обход VPN — ровно в тот момент, когда пользователь считает
+         * себя защищённым и ничего не заметил (в UI просто «ошибка»). Оставляя
+         * интерфейс поднятым БЕЗ движка, мы получаем чёрную дыру: маршруты на
+         * месте, пакеты уходят в TUN, читать их некому — соединения не идут
+         * никуда, вместо того чтобы пойти напрямую.
+         *
+         * Инвариант порядка закрытия при этом не нарушается: движок мы всё равно
+         * останавливаем немедленно, а tunInterface.close() лишь откладывается до
+         * явного disconnect/onDestroy/следующего CONNECT — то есть по-прежнему
+         * происходит СТРОГО после engine.stop().
+         *
+         * Константа, а не настройка: поведение должно быть предсказуемым, но
+         * оставляем один переключатель на случай, если понадобится вернуть
+         * старое поведение (fail-open) без хирургии по коду.
+         */
+        private const val KILL_SWITCH_ENABLED = true
+
+        /**
+         * Сколько ждать поднятия туннеля, прежде чем признать попытку зависшей.
+         * Без этого «залипшая» сеть или молчащее ядро оставляют пользователя в
+         * состоянии Connecting навсегда: кнопки нет, статус не меняется, и
+         * единственный выход — убить приложение. 45 с — компромисс: медленный
+         * DNS + TLS-хендшейк на плохом мобильном интернете укладываются, а
+         * реальный «висяк» уже очевиден.
+         */
+        private const val CONNECT_TIMEOUT_MS = 45_000L
+
+        /**
+         * Сколько терпеть полное отсутствие сети, прежде чем перевести туннель в
+         * ошибку. Короткие провалы (лифт, переключение Wi-Fi → LTE) отрабатывает
+         * штатный хендовер через onAvailable, и дёргать пользователя из-за них
+         * нельзя. 30 с — уже не провал, а реальная потеря связи, и честнее
+         * показать «Нет сети», чем держать статус «Подключено» при мёртвом
+         * туннеле.
+         */
+        private const val NETWORK_LOSS_TIMEOUT_MS = 30_000L
     }
 }

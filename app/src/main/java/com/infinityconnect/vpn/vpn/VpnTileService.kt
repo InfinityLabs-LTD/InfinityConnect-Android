@@ -130,11 +130,21 @@ class VpnTileService : TileService() {
         }
     }
 
-    /** Туннель поднят или поднимается? */
+    /**
+     * Туннель поднят, поднимается или удерживается kill-switch'ем?
+     *
+     * Error здесь приравнен к «поднят», если сервис ещё жив: при аварийном
+     * обрыве с включённым kill-switch [InfinityVpnService] намеренно НЕ
+     * закрывает TUN и не завершается — интерфейс продолжает поглощать трафик,
+     * чтобы тот не пошёл мимо VPN. Считать такое состояние отключённым нельзя:
+     * тап по плитке ушёл бы в ветку подключения, и пользователь не смог бы
+     * снять блокировку трафика из шторки.
+     */
     private fun isTunnelUp(): Boolean = when (stateHolder.state.value) {
         TunnelState.Connected, TunnelState.Connecting -> true
         // Holder мог не успеть наполниться (см. KDoc класса) — проверяем сервис.
-        TunnelState.Disconnected -> isVpnServiceRunning()
+        // Для Error та же проверка отвечает и на вопрос «держит ли kill-switch».
+        TunnelState.Disconnected, is TunnelState.Error -> isVpnServiceRunning()
         else -> false
     }
 
@@ -144,7 +154,13 @@ class VpnTileService : TileService() {
             TunnelState.Connected -> Tile.STATE_ACTIVE to getString(R.string.tile_connected)
             TunnelState.Connecting -> Tile.STATE_ACTIVE to getString(R.string.tile_connecting)
             TunnelState.Disconnecting -> Tile.STATE_UNAVAILABLE to getString(R.string.tile_disconnecting)
-            is TunnelState.Error -> Tile.STATE_INACTIVE to getString(R.string.tile_error)
+            // При аварии с kill-switch сервис жив и держит TUN: трафик
+            // заблокирован, а не «просто ошибка». Показываем плитку активной,
+            // иначе пользователь не поймёт, почему интернет не работает, и
+            // будет искать причину не там (см. isTunnelUp).
+            is TunnelState.Error ->
+                if (isVpnServiceRunning()) Tile.STATE_ACTIVE to getString(R.string.tile_blocked)
+                else Tile.STATE_INACTIVE to getString(R.string.tile_error)
             TunnelState.Disconnected ->
                 if (isVpnServiceRunning()) Tile.STATE_ACTIVE to getString(R.string.tile_connected)
                 else Tile.STATE_INACTIVE to getString(R.string.tile_label)
