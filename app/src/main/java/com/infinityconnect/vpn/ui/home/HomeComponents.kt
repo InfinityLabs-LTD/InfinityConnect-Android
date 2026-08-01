@@ -84,11 +84,12 @@ fun KeyCard(
                 )
                 if (key.trafficLimitBytes != null && key.trafficLimitBytes > 0) {
                     val used = key.usedTrafficBytes ?: 0
+                    val context = androidx.compose.ui.platform.LocalContext.current
                     Text(
                         text = stringResource(
                             R.string.home_key_traffic,
-                            formatBytes(used),
-                            formatBytes(key.trafficLimitBytes),
+                            context.formatBytes(used),
+                            context.formatBytes(key.trafficLimitBytes),
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (key.trafficExhausted) InfinityColors.Coral else InfinityColors.MutedDim,

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import com.infinityconnect.vpn.R
 
 /**
  * Открывает ссылку во внешнем браузере. Используется для «Регистрация»,
@@ -12,7 +13,7 @@ import android.widget.Toast
  */
 fun Context.openInBrowser(url: String?) {
     if (url.isNullOrBlank()) {
-        Toast.makeText(this, "Ссылка недоступна", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.error_link_unavailable, Toast.LENGTH_SHORT).show()
         return
     }
     // support_url может прийти как @username — превращаем в t.me-ссылку.
@@ -26,6 +27,6 @@ fun Context.openInBrowser(url: String?) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         })
     } catch (e: ActivityNotFoundException) {
-        Toast.makeText(this, "Не удалось открыть ссылку", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.error_link_open_failed, Toast.LENGTH_SHORT).show()
     }
 }

@@ -2,9 +2,11 @@ package com.infinityconnect.vpn.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.repository.DiscoveryRepository
 import com.infinityconnect.vpn.domain.usecase.LoginAndSyncUseCase
+import com.infinityconnect.vpn.ui.util.ErrorMessage
 import com.infinityconnect.vpn.ui.util.toMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +20,8 @@ data class AuthUiState(
     val login: String = "",
     val password: String = "",
     val loading: Boolean = false,
-    val error: String? = null,
+    /** Ошибка как ID строки + аргументы — резолвится на экране (см. errorText). */
+    val error: ErrorMessage? = null,
     val registerUrl: String? = null,
     val forgotPasswordUrl: String? = null,
 )
@@ -46,7 +49,7 @@ class AuthViewModel @Inject constructor(
     fun submit(onSuccess: () -> Unit) {
         val s = _state.value
         if (s.login.isBlank() || s.password.isBlank()) {
-            _state.update { it.copy(error = "Введите логин и пароль") }
+            _state.update { it.copy(error = ErrorMessage(R.string.auth_error_empty_fields)) }
             return
         }
         _state.update { it.copy(loading = true, error = null) }

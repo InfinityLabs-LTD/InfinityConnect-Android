@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.data.local.LogEntry
 import com.infinityconnect.vpn.data.local.LogLevel
 import com.infinityconnect.vpn.ui.theme.InfinityColors
@@ -84,12 +86,21 @@ fun LogsScreen(
         }
     }
 
-    LaunchedEffect(ui.notice) {
-        ui.notice?.let {
+    // Текст снекбара резолвится здесь: VM хранит только ID строки, поэтому
+    // сообщение всегда приходит на текущем языке интерфейса.
+    val noticeText = ui.notice?.let { stringResource(it) }
+    LaunchedEffect(noticeText) {
+        noticeText?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.noticeShown()
         }
     }
+
+    // Строки для интента резолвим в композиции: внутри LaunchedEffect
+    // stringResource недоступен (не @Composable-контекст).
+    val shareSubject = stringResource(R.string.logs_share_subject)
+    val shareClipLabel = stringResource(R.string.logs_share_clip)
+    val shareChooserTitle = stringResource(R.string.logs_share_chooser)
 
     // Файл готов — отдаём системному «Поделиться».
     LaunchedEffect(ui.exportFile) {
@@ -103,14 +114,14 @@ fun LogsScreen(
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "Журнал Infinity Connect")
+                putExtra(Intent.EXTRA_SUBJECT, shareSubject)
                 // clipData обязателен: без него системный диалог не получает
                 // доступ к URI — не показывает превью, а часть приложений
                 // получает файл без прав на чтение.
-                clipData = android.content.ClipData.newRawUri("Журнал", uri)
+                clipData = android.content.ClipData.newRawUri(shareClipLabel, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(intent, "Отправить журнал"))
+            context.startActivity(Intent.createChooser(intent, shareChooserTitle))
         }
         viewModel.shareHandled()
     }
@@ -120,19 +131,30 @@ fun LogsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Логи", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(stringResource(R.string.logs_title), fontWeight = FontWeight.Bold)
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.share() }) {
-                        Icon(Icons.Filled.Share, contentDescription = "Поделиться журналом")
+                        Icon(
+                            Icons.Filled.Share,
+                            contentDescription = stringResource(R.string.logs_share),
+                        )
                     }
                     IconButton(onClick = { viewModel.clear() }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Очистить журнал")
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = stringResource(R.string.logs_clear),
+                        )
                     }
                 },
             )
@@ -187,7 +209,7 @@ private fun FilterRow(
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {
                 Text(
-                    text = filter.label,
+                    text = stringResource(filter.labelRes),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (active) InfinityColors.OnSurface else InfinityColors.Muted,
@@ -261,8 +283,9 @@ private fun EmptyState(filtered: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = if (filtered) "Нет записей выбранного уровня"
-            else "Журнал пуст — события появятся при подключении",
+            text = stringResource(
+                if (filtered) R.string.logs_empty_filtered else R.string.logs_empty,
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = InfinityColors.Muted,
             modifier = Modifier.padding(32.dp),

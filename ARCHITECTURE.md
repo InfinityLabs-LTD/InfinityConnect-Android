@@ -74,12 +74,12 @@ HomeScreen (кнопка Connect)
 | `navigation/AppNavHost.kt` | Навигационный граф (SPLASH→AUTH→HOME→PROFILE/ROUTING/PING/LOGS/ABOUT; SETTINGS-хаб остаётся, но главная навигация — боковое меню). `sharedSettingsVm` привязывает VM настроек к SETTINGS либо (при прямом переходе из меню) к HOME. Переходы идут через `navigateOnce`/`popOnce` (проверка RESUMED) — иначе быстрые переключения дублируют или опустошают бэкстек, и экран схлопывается в пустой фон. | все экраны |
 | `navigation/Routes.kt` | Константы маршрутов. | — |
 | `home/HomeScreen.kt` | Главный экран: hero-кнопка (компактная, когда не подключён; под ней — выбранный сервер), подписки — аккордеон через `KeyGroup` (раскрыт только выбранный ключ, остальные свёрнуты со сводкой; бейдж «⚡ Быстрейший» на лучшем сервере). Обёрнут в `ModalNavigationDrawer` — гамбургер открывает боковое меню. | HomeViewModel |
-| `home/AppDrawer.kt` | Боковое меню в стиле сайдбара Windows-клиента: лого, пункты-«пилюли» (активный — акцентный градиент; ⚡ Подключение / 🧭 Маршрутизация / 📶 Пинг / 👤 Профиль / ℹ️ О приложении), статус туннеля внизу. | — |
+| `home/AppDrawer.kt` | Боковое меню в стиле сайдбара Windows-клиента: лого, пункты-«пилюли» (активный — акцентный градиент; ⚡ Подключение / 🧭 Маршрутизация / 📶 Пинг / 📝 Логи / 🌐 Язык / 👤 Профиль / ℹ️ О приложении), статус туннеля внизу. | — |
 | `home/HomeViewModel.kt` | **Ядро UI-логики:** список ключей, выбор сервера, пинг-all, connect/switch/disconnect. Пинг отменяется при подключении и не запускается при активном туннеле (замеры шли бы через VPN). Фоновая проверка обновления клиента при входе (раз за процесс) → snackbar. Последний выбранный сервер восстанавливается при старте из SettingsStore (сверка по имени, индекс — запасной вариант). | ObserveKeys/SyncKeys/GetServers/PingServer/CheckClientUpdate usecase, VpnController, VpnStateHolder, SettingsStore |
 | `home/ConnectHero.kt`, `home/HomeComponents.kt` | Составные Compose-компоненты главного экрана. | — |
 | `auth/AuthScreen.kt` + `AuthViewModel.kt` | Экран входа по логину/паролю. | AuthUseCases |
 | `profile/ProfileScreen.kt` + `ProfileViewModel.kt` | Аккаунт, подписка, разлогин. | UserRepository, LogoutUseCase |
-| `settings/SettingsScreen.kt` | **Хаб-меню настроек:** 3 пункта → Маршрутизация / Настройки пинга / О приложении. | навигация |
+| `settings/SettingsScreen.kt` | **Хаб-меню настроек:** Маршрутизация / Настройки пинга / Логи / Язык / О приложении. | навигация |
 | `settings/SettingsViewModel.kt` | VM всех экранов настроек (маршрутизация + пинг + список приложений). Общий инстанс для подэкранов через backstack-entry SETTINGS. | SettingsStore, RoutingRepository |
 | `settings/RoutingScreen.kt` | Экран маршрутизации: per-app split-tunnel + домены. Общий режим = ALL (выбор режима и загрузка конфига правил убраны из UI). | SettingsViewModel |
 | `settings/PingScreen.kt` | Экран настроек пинга (протокол/режим/таймаут/URL). | SettingsViewModel |
@@ -88,10 +88,13 @@ HomeScreen (кнопка Connect)
 | `settings/AboutViewModel.kt` | VM обновления клиента: check → download (прогресс) → ApkInstaller. | CheckClientUpdate/DownloadClientUpdate usecase |
 | `settings/AppPickerScreen.kt` | Экран выбора приложений для per-app (общий VM через backstack-entry SETTINGS). Список приходит порциями из `SettingsViewModel.loadApps`: спиннер по центру только до первой порции, дальше — индикатор дозагрузки в хвосте `LazyColumn`. | SettingsViewModel |
 | `settings/SettingsCommon.kt` | Общие Compose-элементы экранов настроек (SettingsScaffold/SectionTitle/OptionRow/fieldColors). | — |
-| `settings/PingMethodUi.kt` | UI-модель метода пинга. | domain.model.PingMethod |
+| `settings/PingMethodUi.kt` | UI-модель метода пинга (название/описание — ID строк). | domain.model.PingMethod |
+| `settings/SitePresetUi.kt` | Названия и описания пресетов доменной маршрутизации (ID строк). Держатся здесь, а не в enum: доменная модель не знает про язык. | domain.model.SitePreset |
+| `settings/LanguageScreen.kt` | Экран выбора языка интерфейса: Системный / Русский / English. | SettingsViewModel, LanguageController |
 | `components/Common.kt`, `components/Design.kt` | Переиспользуемые Compose-виджеты. | — |
 | `theme/Theme.kt` | Тема Material. | — |
-| `util/Browser.kt`, `util/Formatters.kt` | Открытие ссылок, форматирование байт/скорости. | — |
+| `util/Browser.kt`, `util/Formatters.kt` | Открытие ссылок, форматирование байт/скорости (Context-расширения — единицы измерения из ресурсов). `ErrorMessage` + `errorText`: ошибки VM хранят ID строки и аргументы, текст резолвится в композиции — иначе сообщение застывало бы на языке, актуальном в момент ошибки. | — |
+| `util/LanguageController.kt` | Применение языка интерфейса. На Android 13+ — напрямую системный `LocaleManager` (AppCompat здесь не работает: его `setApplicationLocales` требует AppCompatActivity, а у нас чистый Compose/ComponentActivity), ниже — `AppCompatDelegate` с главного потока. | domain.model.Language |
 | `util/ApkInstaller.kt` | Запуск системного установщика для скачанного APK (FileProvider `${applicationId}.fileprovider`, cacheDir/updates). | — |
 
 ### `domain/` — бизнес-логика (не знает про Android-фреймворки, кроме мелочей)
@@ -230,6 +233,16 @@ enabled`) — в любом порядке. Повторный запуск ТО
 - **`AppResult`/`AppError`** (`domain/model/Result.kt`) — единый способ возврата ошибок
   во всех suspend-функциях. Не бросать исключения из usecase/repository.
 - **`VpnStateHolder`** — единственный источник состояния туннеля для UI.
+- **Локализация:** все пользовательские строки живут в `res/values/strings.xml` (ru,
+  по умолчанию) и `res/values-en/strings.xml`; список локалей продублирован в
+  `res/xml/locales_config.xml` и `resourceConfigurations` (`app/build.gradle.kts`) —
+  при добавлении языка править все три места плюс `domain/model/Language.kt`.
+  ViewModel **не собирает текст**: она хранит ID строки (`@StringRes`) или
+  `ErrorMessage`, а резолвит их экран через `stringResource`/`errorText`. Иначе
+  сообщение застывает на языке, актуальном в момент его создания, и не переживает
+  смену языка. Источник правды о текущем языке — `LanguageController.current`
+  (системный `LocaleManager` на 13+), а не запись в DataStore: язык можно сменить
+  и в системных настройках мимо приложения.
 - **Подписка первична:** `BuildConnectionUseCase` берёт конфиг из подписки; `/v1/config` —
   только fallback для VLESS-метаданных.
 - **Офлайн-режим (как Happ/INCY):** три диск-кэша переживают перезапуск — discovery

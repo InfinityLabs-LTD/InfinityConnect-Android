@@ -33,9 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.theme.LocalInfinityGradients
 
@@ -68,11 +70,16 @@ fun AppPickerScreen(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Приложения", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(stringResource(R.string.apps_title), fontWeight = FontWeight.Bold)
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
             )
@@ -87,7 +94,7 @@ fun AppPickerScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Поиск") },
+                label = { Text(stringResource(R.string.apps_search)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             )
@@ -109,7 +116,7 @@ fun AppPickerScreen(
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
-                        text = "Приложения не найдены",
+                        text = stringResource(R.string.apps_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = InfinityColors.Muted,
                     )
@@ -158,7 +165,8 @@ private fun AppRow(app: InstalledApp, checked: Boolean, onToggle: () -> Unit) {
                 color = InfinityColors.OnSurface,
             )
             Text(
-                text = app.packageName + if (app.isSystem) " · системное" else "",
+                text = app.packageName +
+                    if (app.isSystem) stringResource(R.string.apps_system_suffix) else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = InfinityColors.Muted,
             )

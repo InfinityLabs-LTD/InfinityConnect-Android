@@ -8,6 +8,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.res.stringResource
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.ui.SplashViewModel
 import com.infinityconnect.vpn.ui.StartDestination
 import com.infinityconnect.vpn.ui.auth.AuthScreen
@@ -17,6 +19,7 @@ import com.infinityconnect.vpn.ui.home.HomeScreen
 import com.infinityconnect.vpn.ui.profile.ProfileScreen
 import com.infinityconnect.vpn.ui.settings.AboutScreen
 import com.infinityconnect.vpn.ui.settings.AppPickerScreen
+import com.infinityconnect.vpn.ui.settings.LanguageScreen
 import com.infinityconnect.vpn.ui.settings.LogsScreen
 import com.infinityconnect.vpn.ui.settings.PingScreen
 import com.infinityconnect.vpn.ui.settings.RoutingScreen
@@ -39,9 +42,9 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
             when (destination) {
                 StartDestination.ERROR ->
                     FullScreenMessage(
-                        title = "Нет соединения с сервером",
-                        description = "Проверьте интернет и попробуйте снова.",
-                        actionLabel = "Повторить",
+                        title = stringResource(R.string.splash_no_connection_title),
+                        description = stringResource(R.string.splash_no_connection_description),
+                        actionLabel = stringResource(R.string.common_retry),
                         onAction = { viewModel.retry() },
                     )
                 else -> FullScreenLoading()
@@ -75,6 +78,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                 onOpenRouting = { navController.navigateOnce(entry, Routes.ROUTING) },
                 onOpenPing = { navController.navigateOnce(entry, Routes.PING) },
                 onOpenLogs = { navController.navigateOnce(entry, Routes.LOGS) },
+                onOpenLanguage = { navController.navigateOnce(entry, Routes.LANGUAGE) },
                 onOpenAbout = { navController.navigateOnce(entry, Routes.ABOUT) },
             )
         }
@@ -97,6 +101,7 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
                 onOpenRouting = { navController.navigateOnce(entry, Routes.ROUTING) },
                 onOpenPing = { navController.navigateOnce(entry, Routes.PING) },
                 onOpenLogs = { navController.navigateOnce(entry, Routes.LOGS) },
+                onOpenLanguage = { navController.navigateOnce(entry, Routes.LANGUAGE) },
                 onOpenAbout = { navController.navigateOnce(entry, Routes.ABOUT) },
             )
         }
@@ -122,6 +127,13 @@ fun AppNavHost(navController: NavHostController = rememberNavController()) {
 
         composable(Routes.LOGS) { entry ->
             LogsScreen(onBack = { navController.popOnce(entry) })
+        }
+
+        composable(Routes.LANGUAGE) { entry ->
+            LanguageScreen(
+                viewModel = sharedSettingsVm(navController, entry),
+                onBack = { navController.popOnce(entry) },
+            )
         }
 
         composable(Routes.APP_PICKER) { entry ->

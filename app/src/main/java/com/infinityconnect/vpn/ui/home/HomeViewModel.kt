@@ -2,6 +2,7 @@ package com.infinityconnect.vpn.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.SubscriptionServer
 import com.infinityconnect.vpn.domain.model.KeyStatus
@@ -12,6 +13,7 @@ import com.infinityconnect.vpn.domain.usecase.GetSubscriptionServersUseCase
 import com.infinityconnect.vpn.domain.usecase.ObserveKeysUseCase
 import com.infinityconnect.vpn.domain.usecase.PingServerUseCase
 import com.infinityconnect.vpn.domain.usecase.SyncKeysUseCase
+import com.infinityconnect.vpn.ui.util.ErrorMessage
 import com.infinityconnect.vpn.ui.util.toMessage
 import com.infinityconnect.vpn.vpn.TunnelState
 import com.infinityconnect.vpn.vpn.TunnelStats
@@ -56,9 +58,10 @@ data class HomeUiState(
         com.infinityconnect.vpn.domain.model.PingMethod.PROXY_GET,
     val refreshing: Boolean = false,
     val loadingFirstTime: Boolean = true,
-    val error: String? = null,
+    /** Ошибка как ID строки + аргументы — резолвится на экране (см. errorText). */
+    val error: ErrorMessage? = null,
     /** Одноразовое уведомление (snackbar), напр. «лимит устройств». */
-    val notice: String? = null,
+    val notice: ErrorMessage? = null,
     /** Доступное обновление клиента (фоновая проверка при входе). */
     val availableUpdate: com.infinityconnect.vpn.domain.model.ClientUpdate? = null,
     /**
@@ -331,7 +334,7 @@ class HomeViewModel @Inject constructor(
         if (_ui.value.pinging) return
         // Через активный туннель замеры бессмысленны (RTT пошёл бы через VPN).
         if (isConnectingOrConnected()) {
-            _ui.update { it.copy(notice = "Отключитесь от VPN, чтобы измерить пинг") }
+            _ui.update { it.copy(notice = ErrorMessage(R.string.home_ping_needs_disconnect)) }
             return
         }
         _ui.update { st ->
@@ -354,19 +357,21 @@ class HomeViewModel @Inject constructor(
         .map { it.id }
         .toSet()
 
-    /** Причина недоступности ключа — текст для snackbar. */
-    private fun blockedReason(keyId: Long): String {
+    /** Причина недоступности ключа — сообщение для snackbar. */
+    private fun blockedReason(keyId: Long): ErrorMessage {
         val key = _ui.value.keys.firstOrNull { it.id == keyId }
-            ?: return "Подписка недоступна"
+            ?: return ErrorMessage(R.string.home_blocked_unavailable)
         val status = key.status(expired = isExpired(key.expiresAt))
-        return when (status) {
-            KeyStatus.EXPIRED -> "Срок подписки истёк"
-            KeyStatus.DISABLED -> "Подписка отключена"
-            KeyStatus.LIMITED ->
-                if (key.devicesExhausted) "Достигнут лимит устройств этой подписки"
-                else "Достигнут лимит трафика этой подписки"
-            else -> "Подписка недоступна"
-        }
+        return ErrorMessage(
+            when (status) {
+                KeyStatus.EXPIRED -> R.string.home_blocked_expired
+                KeyStatus.DISABLED -> R.string.home_blocked_disabled
+                KeyStatus.LIMITED ->
+                    if (key.devicesExhausted) R.string.home_blocked_device_limit
+                    else R.string.home_blocked_traffic_limit
+                else -> R.string.home_blocked_unavailable
+            },
+        )
     }
 
     /** Останавливает текущий замер пинга (перед подключением/переключением). */

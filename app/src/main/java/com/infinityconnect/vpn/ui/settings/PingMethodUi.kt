@@ -1,27 +1,27 @@
 package com.infinityconnect.vpn.ui.settings
 
+import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.Color
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 
 /** Отображаемое название протокола пинга. */
-fun PingMethod.title(): String = when (this) {
-    PingMethod.PROXY_GET -> "Через прокси (GET)"
-    PingMethod.PROXY_HEAD -> "Через прокси (HEAD)"
-    PingMethod.TCP -> "TCP"
-    PingMethod.ICMP -> "ICMP"
+@StringRes
+fun PingMethod.titleRes(): Int = when (this) {
+    PingMethod.PROXY_GET -> R.string.ping_method_proxy_get
+    PingMethod.PROXY_HEAD -> R.string.ping_method_proxy_head
+    PingMethod.TCP -> R.string.ping_method_tcp
+    PingMethod.ICMP -> R.string.ping_method_icmp
 }
 
 /** Пояснение протокола пинга для настроек. */
-fun PingMethod.description(): String = when (this) {
-    PingMethod.PROXY_GET ->
-        "HTTP GET к тест-URL через сам протокол сервера (ядро Xray): полный ответ. Самый точный, но значения выше. Для Hysteria2 — откат на TCP."
-    PingMethod.PROXY_HEAD ->
-        "HTTP HEAD к тест-URL через протокол сервера: только заголовки, без тела. Легче GET, значения чуть ниже. Для Hysteria2 — откат на TCP."
-    PingMethod.TCP ->
-        "Время TCP-подключения к серверу (host:port). Чистая задержка до узла, без HTTP/TLS."
-    PingMethod.ICMP ->
-        "ICMP echo (ping) до адреса сервера. Сетевой RTT; часть сетей блокирует ICMP."
+@StringRes
+fun PingMethod.descriptionRes(): Int = when (this) {
+    PingMethod.PROXY_GET -> R.string.ping_method_proxy_get_desc
+    PingMethod.PROXY_HEAD -> R.string.ping_method_proxy_head_desc
+    PingMethod.TCP -> R.string.ping_method_tcp_desc
+    PingMethod.ICMP -> R.string.ping_method_icmp_desc
 }
 
 /**

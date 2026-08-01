@@ -78,7 +78,11 @@ fun UpdateAvailableDialog(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    stringResource(R.string.home_update_size, formatBytes(update.sizeBytes)),
+                    stringResource(
+                        R.string.home_update_size,
+                        androidx.compose.ui.platform.LocalContext.current
+                            .formatBytes(update.sizeBytes),
+                    ),
                     color = InfinityColors.MutedDim,
                     style = MaterialTheme.typography.bodySmall,
                 )

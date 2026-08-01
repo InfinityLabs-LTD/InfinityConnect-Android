@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Список языков приложения (per-app language, Android 13+).
+
+    Из него система строит пункт «Язык» в системных настройках приложения и
+    хранит выбор пользователя на уровне ОС. Держать синхронно с resourceConfigurations
+    в app/build.gradle.kts и с LanguageOption в коде.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="ru" />
+    <locale android:name="en" />
+</locale-config>

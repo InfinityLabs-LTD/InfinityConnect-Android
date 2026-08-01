@@ -12,8 +12,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
 import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
@@ -35,7 +37,7 @@ fun RoutingScreen(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
 
-    SettingsScaffold(title = "Маршрутизация", onBack = onBack) {
+    SettingsScaffold(title = stringResource(R.string.routing_title), onBack = onBack) {
         AppRoutingSection(ui, viewModel, onOpenAppPicker)
         SitePresetsSection(ui, viewModel)
         SiteRoutingSection(ui, viewModel)
@@ -49,29 +51,29 @@ fun RoutingScreen(
 private fun AppRoutingSection(ui: SettingsUiState, vm: SettingsViewModel, onOpenAppPicker: () -> Unit) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            SectionTitle("ПО ПРИЛОЖЕНИЯМ")
+            SectionTitle(stringResource(R.string.routing_section_apps))
             OptionRow(
-                title = "Выключено",
-                subtitle = "Весь трафик приложений — по общим правилам",
+                title = stringResource(R.string.routing_apps_off),
+                subtitle = stringResource(R.string.routing_apps_off_desc),
                 selected = ui.appMode == AppRoutingMode.OFF,
                 onSelect = { vm.selectAppMode(AppRoutingMode.OFF) },
             )
             OptionRow(
-                title = "Только выбранные — через VPN",
-                subtitle = "Остальные приложения идут напрямую",
+                title = stringResource(R.string.routing_apps_allow),
+                subtitle = stringResource(R.string.routing_apps_allow_desc),
                 selected = ui.appMode == AppRoutingMode.ALLOW,
                 onSelect = { vm.selectAppMode(AppRoutingMode.ALLOW) },
             )
             OptionRow(
-                title = "Все, кроме выбранных",
-                subtitle = "Выбранные приложения идут напрямую (в обход VPN)",
+                title = stringResource(R.string.routing_apps_disallow),
+                subtitle = stringResource(R.string.routing_apps_disallow_desc),
                 selected = ui.appMode == AppRoutingMode.DISALLOW,
                 onSelect = { vm.selectAppMode(AppRoutingMode.DISALLOW) },
             )
             if (ui.appMode != AppRoutingMode.OFF) {
                 Spacer(Modifier.height(12.dp))
                 GradientButton(
-                    text = "Выбрать приложения (${ui.selectedApps.size})",
+                    text = stringResource(R.string.routing_apps_choose, ui.selectedApps.size),
                     onClick = onOpenAppPicker,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -90,18 +92,17 @@ private fun AppRoutingSection(ui: SettingsUiState, vm: SettingsViewModel, onOpen
 private fun SitePresetsSection(ui: SettingsUiState, vm: SettingsViewModel) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            SectionTitle("ПРЕСЕТЫ САЙТОВ")
+            SectionTitle(stringResource(R.string.routing_section_presets))
             Text(
-                text = "Готовые наборы сайтов — можно включить несколько сразу. " +
-                    "Действуют на VLESS-серверах.",
+                text = stringResource(R.string.routing_presets_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = InfinityColors.Muted,
                 modifier = Modifier.padding(bottom = 10.dp),
             )
             SitePreset.entries.forEach { preset ->
                 CheckRow(
-                    title = preset.title,
-                    subtitle = preset.subtitle,
+                    title = stringResource(preset.titleRes()),
+                    subtitle = stringResource(preset.subtitleRes()),
                     checked = preset in ui.sitePresets,
                     onToggle = { vm.toggleSitePreset(preset) },
                 )
@@ -116,29 +117,28 @@ private fun SitePresetsSection(ui: SettingsUiState, vm: SettingsViewModel) {
 private fun SiteRoutingSection(ui: SettingsUiState, vm: SettingsViewModel) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            SectionTitle("ПО САЙТАМ")
+            SectionTitle(stringResource(R.string.routing_section_sites))
             Text(
-                text = "Доменные правила применяются на VLESS-серверах. " +
-                    "На серверах Hysteria2 список сайтов не действует.",
+                text = stringResource(R.string.routing_sites_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = InfinityColors.Muted,
                 modifier = Modifier.padding(bottom = 10.dp),
             )
             OptionRow(
-                title = "Выключено",
-                subtitle = "Список доменов не используется",
+                title = stringResource(R.string.routing_sites_off),
+                subtitle = stringResource(R.string.routing_sites_off_desc),
                 selected = ui.siteMode == SiteRoutingMode.OFF,
                 onSelect = { vm.selectSiteMode(SiteRoutingMode.OFF) },
             )
             OptionRow(
-                title = "Домены — через VPN",
-                subtitle = "Указанные сайты идут через VPN, остальное — по общему режиму",
+                title = stringResource(R.string.routing_sites_proxy),
+                subtitle = stringResource(R.string.routing_sites_proxy_desc),
                 selected = ui.siteMode == SiteRoutingMode.PROXY,
                 onSelect = { vm.selectSiteMode(SiteRoutingMode.PROXY) },
             )
             OptionRow(
-                title = "Домены — напрямую",
-                subtitle = "Указанные сайты идут в обход VPN",
+                title = stringResource(R.string.routing_sites_direct),
+                subtitle = stringResource(R.string.routing_sites_direct_desc),
                 selected = ui.siteMode == SiteRoutingMode.DIRECT,
                 onSelect = { vm.selectSiteMode(SiteRoutingMode.DIRECT) },
             )
@@ -147,14 +147,14 @@ private fun SiteRoutingSection(ui: SettingsUiState, vm: SettingsViewModel) {
                 OutlinedTextField(
                     value = ui.sitesText,
                     onValueChange = vm::onSitesChange,
-                    label = { Text("Домены (по одному на строку)") },
-                    placeholder = { Text("youtube.com\nnetflix.com") },
+                    label = { Text(stringResource(R.string.routing_sites_label)) },
+                    placeholder = { Text(stringResource(R.string.routing_sites_placeholder)) },
                     colors = fieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
                 GradientButton(
-                    text = "Сохранить список",
+                    text = stringResource(R.string.routing_sites_save),
                     onClick = vm::saveSites,
                     modifier = Modifier.fillMaxWidth(),
                 )

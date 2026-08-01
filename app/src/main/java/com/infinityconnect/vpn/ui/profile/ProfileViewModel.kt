@@ -1,7 +1,9 @@
 package com.infinityconnect.vpn.ui.profile
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.SubscriptionInfo
 import com.infinityconnect.vpn.domain.model.UserInfo
@@ -10,6 +12,7 @@ import com.infinityconnect.vpn.domain.repository.DiscoveryRepository
 import com.infinityconnect.vpn.domain.repository.KeysRepository
 import com.infinityconnect.vpn.domain.repository.UserRepository
 import com.infinityconnect.vpn.domain.usecase.LogoutUseCase
+import com.infinityconnect.vpn.ui.util.ErrorMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,12 +26,18 @@ data class ProfileUiState(
     val loading: Boolean = true,
     val user: UserInfo? = null,
     val subscription: SubscriptionInfo? = null,
-    /** Тариф из активных ключей: «Базовый», «Премиум» или «Базовый + Премиум». */
-    val planLabel: String? = null,
+    /**
+     * Тариф из активных ключей — ID строки («Базовый», «Премиум», «Базовый +
+     * Премиум»). null, если ключей в кэше нет: тогда показывается [planNameRaw].
+     */
+    @StringRes val planLabelRes: Int? = null,
+    /** Название тарифа от сервера — fallback, локализации не подлежит. */
+    val planNameRaw: String? = null,
     /** Ключи пользователя — для перечня сроков по каждой подписке. */
     val keys: List<VpnKey> = emptyList(),
     val supportUrl: String? = null,
-    val error: String? = null,
+    /** Ошибка как ID строки + аргументы — резолвится на экране (см. errorText). */
+    val error: ErrorMessage? = null,
 )
 
 @HiltViewModel
@@ -62,9 +71,14 @@ class ProfileViewModel @Inject constructor(
                     loading = false,
                     user = user,
                     subscription = (subResult as? AppResult.Success)?.data,
-                    planLabel = planLabel(keys, user),
+                    planLabelRes = planLabelRes(keys),
+                    planNameRaw = user?.planName,
                     keys = keys,
-                    error = if (userResult is AppResult.Failure) "Не удалось загрузить профиль" else null,
+                    error = if (userResult is AppResult.Failure) {
+                        ErrorMessage(R.string.profile_load_failed)
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -73,17 +87,18 @@ class ProfileViewModel @Inject constructor(
     /**
      * Тариф по составу ключей: обычные ключи → «Базовый» (все сервера),
      * премиум-ключи → «Премиум»; есть и те и другие → «Базовый + Премиум».
-     * Ключей в кэше нет — fallback на plan_name от сервера.
+     * Ключей в кэше нет — null, и экран показывает plan_name от сервера.
      */
-    private fun planLabel(keys: List<VpnKey>, user: UserInfo?): String? {
+    @StringRes
+    private fun planLabelRes(keys: List<VpnKey>): Int? {
         val active = keys.filter { it.isActive }
         val hasBase = active.any { !it.isPremium }
         val hasPremium = active.any { it.isPremium }
         return when {
-            hasBase && hasPremium -> "Базовый + Премиум"
-            hasPremium -> "Премиум"
-            hasBase -> "Базовый"
-            else -> user?.planName
+            hasBase && hasPremium -> R.string.profile_plan_base_premium
+            hasPremium -> R.string.profile_plan_premium
+            hasBase -> R.string.profile_plan_base
+            else -> null
         }
     }
 

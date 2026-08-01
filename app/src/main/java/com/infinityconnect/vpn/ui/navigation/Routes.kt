@@ -12,4 +12,5 @@ object Routes {
     const val ABOUT = "about"
     const val APP_PICKER = "app_picker"
     const val LOGS = "logs"
+    const val LANGUAGE = "language"
 }

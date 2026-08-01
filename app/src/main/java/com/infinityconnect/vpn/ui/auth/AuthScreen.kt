@@ -38,6 +38,7 @@ import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.ui.components.GradientButton
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.theme.LocalInfinityGradients
+import com.infinityconnect.vpn.ui.util.errorText
 import com.infinityconnect.vpn.ui.util.openInBrowser
 
 /**
@@ -97,9 +98,10 @@ fun AuthScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
 
-        if (state.error != null) {
+        val errorMessage = errorText(state.error)
+        if (errorMessage != null) {
             Text(
-                text = state.error!!,
+                text = errorMessage,
                 color = InfinityColors.Coral,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),

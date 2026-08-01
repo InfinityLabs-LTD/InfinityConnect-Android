@@ -1,7 +1,9 @@
 package com.infinityconnect.vpn.ui.settings
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.data.local.LogEntry
 import com.infinityconnect.vpn.data.local.LogLevel
 import com.infinityconnect.vpn.data.local.LogStore
@@ -18,11 +20,11 @@ import java.io.File
 import javax.inject.Inject
 
 /** Фильтр журнала по минимальному уровню. */
-enum class LogFilter(val label: String, val minLevel: LogLevel) {
-    ALL("Все", LogLevel.DEBUG),
-    INFO("Инфо", LogLevel.INFO),
-    WARN("Предупреждения", LogLevel.WARN),
-    ERROR("Ошибки", LogLevel.ERROR),
+enum class LogFilter(@StringRes val labelRes: Int, val minLevel: LogLevel) {
+    ALL(R.string.logs_filter_all, LogLevel.DEBUG),
+    INFO(R.string.logs_filter_info, LogLevel.INFO),
+    WARN(R.string.logs_filter_warn, LogLevel.WARN),
+    ERROR(R.string.logs_filter_error, LogLevel.ERROR),
 }
 
 /** Состояние экрана логов. */
@@ -32,7 +34,12 @@ data class LogsUiState(
     val autoScroll: Boolean = true,
     /** Файл, подготовленный к отправке (кнопка «Поделиться»). */
     val exportFile: File? = null,
-    val notice: String? = null,
+    /**
+     * Сообщение для снекбара — ID строки, а не текст: VM не должна собирать
+     * локализованные строки (у неё нет Context, а язык может смениться между
+     * записью и показом). Резолвится на экране через stringResource.
+     */
+    @StringRes val notice: Int? = null,
 )
 
 @HiltViewModel
@@ -61,7 +68,7 @@ class LogsViewModel @Inject constructor(
         viewModelScope.launch {
             val file = logStore.exportToCache()
             _ui.update {
-                if (file == null) it.copy(notice = "Не удалось подготовить файл журнала")
+                if (file == null) it.copy(notice = R.string.logs_export_failed)
                 else it.copy(exportFile = file)
             }
         }
@@ -75,7 +82,7 @@ class LogsViewModel @Inject constructor(
     fun clear() {
         viewModelScope.launch {
             logStore.clear()
-            _ui.update { it.copy(notice = "Журнал очищен") }
+            _ui.update { it.copy(notice = R.string.logs_cleared) }
         }
     }
 }

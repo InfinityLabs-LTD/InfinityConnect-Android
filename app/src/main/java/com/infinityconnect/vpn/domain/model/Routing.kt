@@ -71,8 +71,9 @@ private val SBER_TBANK = listOf(
  * включить несколько пресетов одновременно; они складываются с ручным списком
  * доменов. Применяется только на Xray (как и вся доменная маршрутизация).
  *
- * @param title название в UI.
- * @param subtitle краткое описание для UI.
+ * Названия и описания для UI живут в ресурсах (см. `SitePresetUi` в ui/settings):
+ * доменная модель не знает про язык интерфейса.
+ *
  * @param direction направление трафика для доменов пресета
  *   ([SiteRoutingMode.DIRECT] или [SiteRoutingMode.PROXY]).
  * @param domains доменные суффиксы (Xray `domain:` — матчит и поддомены).
@@ -81,8 +82,6 @@ private val SBER_TBANK = listOf(
  *   направляет остальное напрямую (правило-исключение ставится ВЫШЕ пресета).
  */
 enum class SitePreset(
-    val title: String,
-    val subtitle: String,
     val direction: SiteRoutingMode,
     val domains: List<String>,
     val regexps: List<String> = emptyList(),
@@ -90,8 +89,6 @@ enum class SitePreset(
 ) {
     /** Все российские зоны и популярные RU-сервисы — в обход VPN. */
     RU_BYPASS(
-        title = "Российские сайты — напрямую",
-        subtitle = "Зоны .ru/.su/.рф и популярные RU-сервисы идут в обход VPN",
         direction = SiteRoutingMode.DIRECT,
         domains = emptyList(), // домены берутся из RU_SERVICES + regexp-зон
         regexps = listOf(""".*\.ru$""", """.*\.su$""", """.*\.рф$"""),
@@ -100,8 +97,6 @@ enum class SitePreset(
 
     /** Российские банки и госсервисы — в обход VPN (антифрод любит RU-IP). */
     RU_BANKS(
-        title = "Банки и Госуслуги — напрямую",
-        subtitle = "Банковские приложения и госсервисы часто блокируют зарубежные IP",
         direction = SiteRoutingMode.DIRECT,
         // Сбер и Т-Банк намеренно не включены — они должны работать через VPN.
         domains = listOf(
@@ -115,8 +110,6 @@ enum class SitePreset(
 
     /** Российские соцсети/почта/маркетплейсы — в обход VPN. */
     RU_SERVICES(
-        title = "RU-сервисы — напрямую",
-        subtitle = "VK, Яндекс, Ozon, Wildberries, Avito и другие — в обход VPN",
         direction = SiteRoutingMode.DIRECT,
         domains = listOf(
             "vk.com", "vk.ru", "vk.cc", "vkvideo.ru", "userapi.com", "mail.ru",
@@ -129,8 +122,6 @@ enum class SitePreset(
 
     /** Зарубежные видеосервисы — принудительно через VPN. */
     STREAMING_PROXY(
-        title = "YouTube и стриминги — через VPN",
-        subtitle = "YouTube, Netflix, Twitch и др. всегда идут через VPN",
         direction = SiteRoutingMode.PROXY,
         domains = listOf(
             "youtube.com", "youtu.be", "ytimg.com", "googlevideo.com",
@@ -143,8 +134,6 @@ enum class SitePreset(
 
     /** Заблокированные в РФ соцсети — принудительно через VPN. */
     SOCIAL_PROXY(
-        title = "Соцсети и мессенджеры — через VPN",
-        subtitle = "Instagram, Facebook, X (Twitter), Telegram, Discord — всегда через VPN",
         direction = SiteRoutingMode.PROXY,
         domains = listOf(
             "instagram.com", "cdninstagram.com", "facebook.com", "fbcdn.net",

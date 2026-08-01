@@ -16,6 +16,35 @@
     <string name="common_retry">Try again</string>
     <string name="common_dash">—</string>
 
+    <!-- Errors (AppError.toMessage) -->
+    <string name="error_network">No connection to the server. Check your internet.</string>
+    <string name="error_invalid_credentials">Incorrect username or password.</string>
+    <string name="error_unauthorized">Your session has expired. Please sign in again.</string>
+    <string name="error_server">Server error (code %1$d). Please try again later.</string>
+    <string name="error_parse">Malformed server response.</string>
+    <string name="error_unknown">Unexpected error.</string>
+    <string name="error_link_unavailable">Link unavailable</string>
+    <string name="error_link_open_failed">Could not open the link</string>
+
+    <!-- Update check/download errors -->
+    <string name="update_error_network">No connection to the server</string>
+    <string name="update_error_corrupted">The update file is corrupted</string>
+    <string name="update_error_server">Server error (%1$d)</string>
+    <string name="update_error_unknown">Could not check for updates</string>
+
+    <!-- Traffic and speed units -->
+    <string name="unit_bytes">%1$d B</string>
+    <string name="unit_kb">KB</string>
+    <string name="unit_mb">MB</string>
+    <string name="unit_gb">GB</string>
+    <string name="unit_tb">TB</string>
+    <string name="unit_per_second">%1$s/s</string>
+
+    <!-- ================= VPN service notification ================= -->
+    <string name="vpn_channel_name">VPN connection</string>
+    <string name="vpn_channel_description">Infinity Connect VPN tunnel status</string>
+    <string name="vpn_notification_disconnect">Disconnect</string>
+
     <!-- ================= Home ================= -->
     <string name="home_title">Infinity Connect</string>
     <string name="home_menu">Menu</string>
@@ -25,6 +54,7 @@
     <string name="home_drawer_routing">Routing</string>
     <string name="home_drawer_ping">Ping</string>
     <string name="home_drawer_logs">Logs</string>
+    <string name="home_drawer_language">Language</string>
     <string name="home_drawer_profile">Profile</string>
     <string name="home_drawer_about">About</string>
     <string name="home_drawer_brand_top">Infinity</string>
@@ -80,6 +110,14 @@
     <string name="home_key_traffic">%1$s / %2$s</string>
     <string name="home_key_devices">Devices: %1$d / %2$d</string>
 
+    <!-- Why a key cannot be used for connecting -->
+    <string name="home_blocked_unavailable">Subscription unavailable</string>
+    <string name="home_blocked_expired">Subscription has expired</string>
+    <string name="home_blocked_disabled">Subscription is disabled</string>
+    <string name="home_blocked_device_limit">Device limit for this subscription reached</string>
+    <string name="home_blocked_traffic_limit">Traffic limit for this subscription reached</string>
+    <string name="home_ping_needs_disconnect">Disconnect from the VPN to measure ping</string>
+
     <string name="home_server_blocked">Unavailable</string>
     <string name="home_server_fastest">⚡ Fastest</string>
     <string name="home_ping_measuring">…</string>
@@ -102,6 +140,11 @@
     <string name="auth_submit">Sign in</string>
     <string name="auth_register">Sign up</string>
     <string name="auth_forgot_password">Forgot password?</string>
+    <string name="auth_error_empty_fields">Enter your username and password</string>
+
+    <!-- ================= Splash / start-up error ================= -->
+    <string name="splash_no_connection_title">No connection to the server</string>
+    <string name="splash_no_connection_description">Check your internet and try again.</string>
 
     <!-- ================= Profile ================= -->
     <string name="profile_title">Profile</string>
@@ -126,6 +169,133 @@
     <string name="profile_login">Username</string>
     <string name="profile_email">E-mail</string>
     <string name="profile_plan">Plan</string>
+    <string name="profile_load_failed">Could not load your profile</string>
+    <string name="profile_plan_base">Basic</string>
+    <string name="profile_plan_premium">Premium</string>
+    <string name="profile_plan_base_premium">Basic + Premium</string>
     <string name="profile_support">Contact support</string>
     <string name="profile_logout">Sign out</string>
+
+    <!-- ================= Settings: hub ================= -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_routing">Routing</string>
+    <string name="settings_routing_desc">Per app and per site</string>
+    <string name="settings_ping">Ping settings</string>
+    <string name="settings_ping_desc">Protocol, mode, timeout and test URL</string>
+    <string name="settings_logs">Logs</string>
+    <string name="settings_logs_desc">App and core log, sending to support</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_desc">App interface language</string>
+    <string name="settings_about">About</string>
+    <string name="settings_about_desc">Version, cores, developer</string>
+
+    <!-- ================= Settings: language ================= -->
+    <string name="language_title">Language</string>
+    <string name="language_section">INTERFACE LANGUAGE</string>
+    <string name="language_system">System</string>
+    <string name="language_system_desc">Follow device settings</string>
+    <!-- Language names are deliberately NOT translated: identical in both locales. -->
+    <string name="language_russian">Русский</string>
+    <string name="language_russian_desc">Russian interface language</string>
+    <string name="language_english">English</string>
+    <string name="language_english_desc">English interface language</string>
+    <string name="language_hint">The screen will restart to apply the language. Your connection stays up.</string>
+
+    <!-- ================= Settings: routing ================= -->
+    <string name="routing_title">Routing</string>
+    <string name="routing_section_apps">PER APP</string>
+    <string name="routing_apps_off">Off</string>
+    <string name="routing_apps_off_desc">All app traffic follows the general rules</string>
+    <string name="routing_apps_allow">Only selected — via VPN</string>
+    <string name="routing_apps_allow_desc">Other apps connect directly</string>
+    <string name="routing_apps_disallow">All except selected</string>
+    <string name="routing_apps_disallow_desc">Selected apps connect directly (bypassing VPN)</string>
+    <string name="routing_apps_choose">Select apps (%1$d)</string>
+    <string name="routing_section_presets">SITE PRESETS</string>
+    <string name="routing_presets_hint">Ready-made site sets — several can be enabled at once. Apply to VLESS servers.</string>
+    <string name="routing_section_sites">PER SITE</string>
+    <string name="routing_sites_hint">Domain rules apply to VLESS servers. On Hysteria2 servers the site list has no effect.</string>
+    <string name="routing_sites_off">Off</string>
+    <string name="routing_sites_off_desc">The domain list is not used</string>
+    <string name="routing_sites_proxy">Domains — via VPN</string>
+    <string name="routing_sites_proxy_desc">Listed sites go through the VPN, everything else follows the general mode</string>
+    <string name="routing_sites_direct">Domains — direct</string>
+    <string name="routing_sites_direct_desc">Listed sites bypass the VPN</string>
+    <string name="routing_sites_label">Domains (one per line)</string>
+    <string name="routing_sites_placeholder">youtube.com\nnetflix.com</string>
+    <string name="routing_sites_save">Save list</string>
+    <string name="routing_rules_downloaded">Rules downloaded</string>
+
+    <!-- Domain routing presets (SitePreset) -->
+    <string name="preset_ru_direct">Russian sites — direct</string>
+    <string name="preset_ru_direct_desc">The .ru/.su/.рф zones and popular RU services bypass the VPN</string>
+    <string name="preset_banks_direct">Banks and government services — direct</string>
+    <string name="preset_banks_direct_desc">Banking apps and government services often block foreign IPs</string>
+    <string name="preset_ru_services_direct">RU services — direct</string>
+    <string name="preset_ru_services_direct_desc">VK, Yandex, Ozon, Wildberries, Avito and others bypass the VPN</string>
+    <string name="preset_streaming_proxy">YouTube and streaming — via VPN</string>
+    <string name="preset_streaming_proxy_desc">YouTube, Netflix, Twitch and others always go through the VPN</string>
+    <string name="preset_social_proxy">Social networks and messengers — via VPN</string>
+    <string name="preset_social_proxy_desc">Instagram, Facebook, X (Twitter), Telegram, Discord — always via VPN</string>
+
+    <!-- ================= Settings: app picker ================= -->
+    <string name="apps_title">Apps</string>
+    <string name="apps_search">Search</string>
+    <string name="apps_empty">No apps found</string>
+    <string name="apps_system_suffix"> · system</string>
+
+    <!-- ================= Settings: ping ================= -->
+    <string name="ping_title">Ping settings</string>
+    <string name="ping_section_methods">PING PROTOCOLS</string>
+    <string name="ping_sample_ms">132 ms</string>
+    <string name="ping_mode_row">Mode (via)</string>
+    <string name="ping_mode_hint">default — the best of several requests is taken.\ndouble — the request runs twice within one core session; the second one is measured.\nkeepalive — the second request measures pure response time over an already established TLS connection.</string>
+    <string name="ping_section_timeout">PROXY PING TIMEOUT</string>
+    <string name="ping_seconds_short">%1$ds</string>
+    <string name="ping_section_url">TEST URL SETTINGS</string>
+    <string name="ping_url_hint">URL for proxy methods (GET/HEAD).</string>
+    <string name="ping_url_label">Test URL</string>
+    <string name="ping_url_save">Save URL</string>
+    <string name="ping_method_proxy_get">Via proxy (GET)</string>
+    <string name="ping_method_proxy_get_desc">HTTP GET to the test URL through the server protocol itself (Xray core): full response. The most accurate, but values are higher. Falls back to TCP for Hysteria2.</string>
+    <string name="ping_method_proxy_head">Via proxy (HEAD)</string>
+    <string name="ping_method_proxy_head_desc">HTTP HEAD to the test URL through the server protocol: headers only, no body. Lighter than GET, values slightly lower. Falls back to TCP for Hysteria2.</string>
+    <string name="ping_method_tcp">TCP</string>
+    <string name="ping_method_tcp_desc">TCP connection time to the server (host:port). Pure latency to the node, without HTTP/TLS.</string>
+    <string name="ping_method_icmp">ICMP</string>
+    <string name="ping_method_icmp_desc">ICMP echo (ping) to the server address. Network RTT; some networks block ICMP.</string>
+
+    <!-- ================= Settings: logs ================= -->
+    <string name="logs_title">Logs</string>
+    <string name="logs_share">Share log</string>
+    <string name="logs_clear">Clear log</string>
+    <string name="logs_share_subject">Infinity Connect log</string>
+    <string name="logs_share_clip">Log</string>
+    <string name="logs_share_chooser">Send log</string>
+    <string name="logs_filter_all">All</string>
+    <string name="logs_filter_info">Info</string>
+    <string name="logs_filter_warn">Warnings</string>
+    <string name="logs_filter_error">Errors</string>
+    <string name="logs_empty">The log is empty — entries appear once you connect</string>
+    <string name="logs_empty_filtered">No entries at the selected level</string>
+    <string name="logs_export_failed">Could not prepare the log file</string>
+    <string name="logs_cleared">Log cleared</string>
+
+    <!-- ================= Settings: about ================= -->
+    <string name="about_title">About</string>
+    <string name="about_section_app">ABOUT</string>
+    <string name="about_app">App</string>
+    <string name="about_app_value">Infinity Connect</string>
+    <string name="about_developer">Developer</string>
+    <string name="about_version">Version</string>
+    <string name="about_version_value">%1$s (%2$d)</string>
+    <string name="about_core_xray">Xray core</string>
+    <string name="about_core_hysteria">Hysteria2 core</string>
+    <string name="about_section_update">UPDATE</string>
+    <string name="about_up_to_date">You have the latest version</string>
+    <string name="about_check_update">Check for update</string>
+    <string name="about_checking">Checking for update…</string>
+    <string name="about_update_available">Version %1$s (%2$d) is available</string>
+    <string name="about_update_download">Download and install</string>
+    <string name="about_downloading">Downloading version %1$s…</string>
 </resources>

@@ -2,13 +2,16 @@ package com.infinityconnect.vpn.ui.settings
 
 import android.Manifest
 import android.content.Context
+import androidx.annotation.StringRes
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.data.local.SettingsStore
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
+import com.infinityconnect.vpn.domain.model.Language
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
@@ -17,6 +20,8 @@ import com.infinityconnect.vpn.domain.model.RoutingSettings
 import com.infinityconnect.vpn.domain.model.SitePreset
 import com.infinityconnect.vpn.domain.model.SiteRoutingMode
 import com.infinityconnect.vpn.domain.repository.RoutingRepository
+import com.infinityconnect.vpn.ui.util.ErrorMessage
+import com.infinityconnect.vpn.ui.util.LanguageController
 import com.infinityconnect.vpn.ui.util.toMessage
 import com.infinityconnect.vpn.vpn.TunnelState
 import com.infinityconnect.vpn.vpn.VpnController
@@ -54,8 +59,9 @@ data class SettingsUiState(
     val rulesUpdatedAt: Long? = null,
     val hasRules: Boolean = false,
     val downloading: Boolean = false,
-    val rulesError: String? = null,
-    val rulesMessage: String? = null,
+    /** Ошибка как ID строки + аргументы — резолвится на экране (см. errorText). */
+    val rulesError: ErrorMessage? = null,
+    @StringRes val rulesMessage: Int? = null,
     // Маршрутизация по приложениям
     val appMode: AppRoutingMode = AppRoutingMode.OFF,
     val selectedApps: Set<String> = emptySet(),
@@ -68,6 +74,8 @@ data class SettingsUiState(
     val pingMode: PingMode = PingMode.DEFAULT,
     val pingUrl: String = PingSettings.DEFAULT_TEST_URL,
     val pingTimeoutSec: Int = PingSettings.DEFAULT_TIMEOUT_SEC,
+    // Язык интерфейса
+    val language: Language = Language.SYSTEM,
 )
 
 @HiltViewModel
@@ -76,6 +84,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val vpnController: VpnController,
     private val vpnStateHolder: VpnStateHolder,
+    private val languageController: LanguageController,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -126,6 +135,18 @@ class SettingsViewModel @Inject constructor(
         settingsStore.ping
             .onEach { p -> applyPing(p) }
             .launchIn(viewModelScope)
+        // Отметку в списке языков берём из того, что РЕАЛЬНО применено
+        // (languageController), а не из хранилища: на Android 13+ язык можно
+        // сменить в системных настройках мимо приложения, и хранилище об этом
+        // не знает. Значение из DataStore нужно лишь как исходное на API < 33
+        // до первого применения.
+        _ui.update { it.copy(language = languageController.current) }
+        viewModelScope.launch {
+            val stored = settingsStore.currentLanguage()
+            if (languageController.current == Language.SYSTEM && stored != Language.SYSTEM) {
+                _ui.update { it.copy(language = stored) }
+            }
+        }
     }
 
     private fun applyRouting(s: RoutingSettings) {
@@ -155,6 +176,25 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // ── Язык интерфейса ──
+
+    /**
+     * Меняет язык интерфейса. Сохранение и применение идут вместе: применение —
+     * источник правды для UI, хранилище нужно для восстановления на API < 33.
+     *
+     * После [LanguageController.apply] система пересоздаёт Activity, поэтому
+     * писать в хранилище нужно ДО применения — иначе корутина VM может не
+     * успеть выполниться.
+     */
+    fun selectLanguage(language: Language) {
+        if (_ui.value.language == language) return
+        _ui.update { it.copy(language = language) }
+        viewModelScope.launch {
+            settingsStore.setLanguage(language)
+            languageController.apply(language)
+        }
+    }
+
     // ── Маршрутизация ──
 
     fun selectMode(mode: RoutingMode) {
@@ -176,7 +216,11 @@ class SettingsViewModel @Inject constructor(
                     rulesUrlEdited = false
                     routingRepository.setMode(RoutingMode.CUSTOM)
                     _ui.update {
-                        it.copy(downloading = false, rulesMessage = "Правила загружены", mode = RoutingMode.CUSTOM)
+                        it.copy(
+                            downloading = false,
+                            rulesMessage = R.string.routing_rules_downloaded,
+                            mode = RoutingMode.CUSTOM,
+                        )
                     }
                 }
                 is AppResult.Failure ->

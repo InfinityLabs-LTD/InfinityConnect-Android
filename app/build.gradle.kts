@@ -22,6 +22,12 @@ android {
         versionName = "1.0.1"
         vectorDrawables { useSupportLibrary = true }
 
+        // Языки приложения. Держать синхронно с res/xml/locales_config.xml —
+        // из него система строит список в «Настройки → Приложения → Язык»,
+        // а resConfigs выкидывает из APK ресурсы всех прочих локалей
+        // (androidx тянет за собой десятки переводов).
+        resourceConfigurations += setOf("ru", "en")
+
         // Сертификатный пиннинг API — ОПЦИОНАЛЬНЫЙ, по умолчанию ВЫКЛЮЧЕН.
         // Хост API не зафиксирован (приходит из discovery), поэтому пин нельзя
         // зашить намертво: он свой у каждого домена. Пустая строка = пиннинг
@@ -93,6 +99,10 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // AppCompat — ради AppCompatDelegate.setApplicationLocales (per-app язык).
+    // На Android 13+ это тонкая обёртка над системным LocaleManager, ниже —
+    // собственное хранилище выбора и пересоздание Activity силами библиотеки.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)

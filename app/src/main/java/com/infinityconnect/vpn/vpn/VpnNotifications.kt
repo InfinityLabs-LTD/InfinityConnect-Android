@@ -23,10 +23,10 @@ object VpnNotifications {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "VPN-соединение",
+                context.getString(R.string.vpn_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Статус VPN-туннеля Infinity Connect"
+                description = context.getString(R.string.vpn_channel_description)
                 setShowBadge(false)
             }
             context.getSystemService(NotificationManager::class.java)
@@ -59,7 +59,7 @@ object VpnNotifications {
         if (disconnectIntent != null) {
             builder.addAction(
                 0,
-                "Отключить",
+                context.getString(R.string.vpn_notification_disconnect),
                 disconnectIntent,
             )
         }

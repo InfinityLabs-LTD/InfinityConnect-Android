@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -27,7 +28,9 @@ import android.content.Context
 import com.infinityconnect.vpn.domain.model.ClientUpdate
 import com.infinityconnect.vpn.BuildConfig
 import com.infinityconnect.vpn.BuildFlags
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.ui.components.GlassCard
+import com.infinityconnect.vpn.ui.util.errorText
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 
 /** Экран «О приложении»: версия, ядра, разработчик, обновление клиента. */
@@ -45,15 +48,28 @@ fun AboutScreen(
         if (updateState is UpdateUiState.Idle) viewModel.check()
     }
 
-    SettingsScaffold(title = "О приложении", onBack = onBack) {
+    SettingsScaffold(title = stringResource(R.string.about_title), onBack = onBack) {
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                SectionTitle("О ПРИЛОЖЕНИИ")
-                InfoRow("Приложение", "Infinity Connect")
-                InfoRow("Разработчик", BuildFlags.DEVELOPER)
-                InfoRow("Версия", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                InfoRow("Ядро Xray", BuildFlags.XRAY_CORE_VERSION)
-                InfoRow("Ядро Hysteria2", BuildFlags.HYSTERIA2_CORE_VERSION)
+                SectionTitle(stringResource(R.string.about_section_app))
+                InfoRow(
+                    stringResource(R.string.about_app),
+                    stringResource(R.string.about_app_value),
+                )
+                InfoRow(stringResource(R.string.about_developer), BuildFlags.DEVELOPER)
+                InfoRow(
+                    stringResource(R.string.about_version),
+                    stringResource(
+                        R.string.about_version_value,
+                        BuildConfig.VERSION_NAME,
+                        BuildConfig.VERSION_CODE,
+                    ),
+                )
+                InfoRow(stringResource(R.string.about_core_xray), BuildFlags.XRAY_CORE_VERSION)
+                InfoRow(
+                    stringResource(R.string.about_core_hysteria),
+                    BuildFlags.HYSTERIA2_CORE_VERSION,
+                )
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -76,20 +92,20 @@ private fun UpdateCard(
     val context = LocalContext.current
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            SectionTitle("ОБНОВЛЕНИЕ")
+            SectionTitle(stringResource(R.string.about_section_update))
             when (state) {
                 is UpdateUiState.Idle, UpdateUiState.UpToDate, is UpdateUiState.Error -> {
                     if (state is UpdateUiState.UpToDate) {
-                        StatusText("У вас последняя версия")
+                        StatusText(stringResource(R.string.about_up_to_date))
                     }
                     if (state is UpdateUiState.Error) {
-                        StatusText(state.message, error = true)
+                        errorText(state.message)?.let { StatusText(it, error = true) }
                     }
                     Button(
                         onClick = onCheck,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     ) {
-                        Text("Проверить обновление")
+                        Text(stringResource(R.string.about_check_update))
                     }
                 }
 
@@ -101,7 +117,7 @@ private fun UpdateCard(
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.size(10.dp))
                     Text(
-                        "Проверка обновления…",
+                        stringResource(R.string.about_checking),
                         style = MaterialTheme.typography.bodyMedium,
                         color = InfinityColors.Muted,
                     )
@@ -113,7 +129,11 @@ private fun UpdateCard(
                     // «Доступна версия 1.0.0» при установленной 1.0.0 выглядит
                     // как ошибка.
                     StatusText(
-                        "Доступна версия ${state.update.version} (${state.update.versionCode})",
+                        stringResource(
+                            R.string.about_update_available,
+                            state.update.version,
+                            state.update.versionCode,
+                        ),
                     )
                     if (state.update.notes.isNotBlank()) {
                         Text(
@@ -127,12 +147,14 @@ private fun UpdateCard(
                         onClick = { onDownload(context, state.update) },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     ) {
-                        Text("Скачать и установить")
+                        Text(stringResource(R.string.about_update_download))
                     }
                 }
 
                 is UpdateUiState.Downloading -> {
-                    StatusText("Скачивание версии ${state.update.version}…")
+                    StatusText(
+                        stringResource(R.string.about_downloading, state.update.version),
+                    )
                     if (state.progress >= 0f) {
                         LinearProgressIndicator(
                             progress = { state.progress },

@@ -23,9 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
@@ -34,6 +36,13 @@ import com.infinityconnect.vpn.ui.components.GradientButton
 import com.infinityconnect.vpn.ui.components.StatusPill
 import com.infinityconnect.vpn.ui.theme.EyebrowStyle
 import com.infinityconnect.vpn.ui.theme.InfinityColors
+
+/**
+ * Значение примера рядом с заголовком «протоколы пинга»: пилл красится по
+ * порогам текущего метода, поэтому число должно совпадать с тем, что показано
+ * в строке `ping_sample_ms`.
+ */
+private const val SAMPLE_PING_MS = 132
 
 /** Экран настроек пинга: протокол, режим (via), таймаут и URL-тест. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,7 +53,7 @@ fun PingScreen(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
 
-    SettingsScaffold(title = "Настройки пинга", onBack = onBack) {
+    SettingsScaffold(title = stringResource(R.string.ping_title), onBack = onBack) {
         PingSection(ui, viewModel)
         Spacer(Modifier.height(8.dp))
     }
@@ -59,14 +68,21 @@ private fun PingSection(ui: SettingsUiState, vm: SettingsViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("ПРОТОКОЛЫ ПИНГА", style = EyebrowStyle, color = InfinityColors.Muted)
+                Text(
+                    stringResource(R.string.ping_section_methods),
+                    style = EyebrowStyle,
+                    color = InfinityColors.Muted,
+                )
                 // Демонстрация цвета текущего метода на примере значения.
-                StatusPill(text = "132 мс", color = pingColor(ui.pingMethod, 132))
+                StatusPill(
+                    text = stringResource(R.string.ping_sample_ms),
+                    color = pingColor(ui.pingMethod, SAMPLE_PING_MS),
+                )
             }
             PingMethod.entries.forEach { method ->
                 OptionRow(
-                    title = method.title(),
-                    subtitle = method.description(),
+                    title = stringResource(method.titleRes()),
+                    subtitle = stringResource(method.descriptionRes()),
                     selected = ui.pingMethod == method,
                     accent = method.baseColor(),
                     onSelect = { vm.selectPingMethod(method) },
@@ -79,9 +95,7 @@ private fun PingSection(ui: SettingsUiState, vm: SettingsViewModel) {
                 PingModeRow(ui.pingMode, vm::selectPingMode)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "default — берётся лучший из нескольких запросов.\n" +
-                        "double — запрос выполняется дважды в рамках одной сессии ядра; замеряется второй.\n" +
-                        "keepalive — второй запрос замеряет чистую скорость ответа через уже установленное TLS-соединение.",
+                    text = stringResource(R.string.ping_mode_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = InfinityColors.Muted,
                 )
@@ -91,13 +105,13 @@ private fun PingSection(ui: SettingsUiState, vm: SettingsViewModel) {
 
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "НАСТРОЙКИ URL-ТЕСТА",
+                text = stringResource(R.string.ping_section_url),
                 style = EyebrowStyle,
                 color = InfinityColors.Muted,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
             Text(
-                text = "URL для прокси-методов (GET/HEAD).",
+                text = stringResource(R.string.ping_url_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = InfinityColors.Muted,
                 modifier = Modifier.padding(bottom = 8.dp),
@@ -105,14 +119,14 @@ private fun PingSection(ui: SettingsUiState, vm: SettingsViewModel) {
             OutlinedTextField(
                 value = ui.pingUrl,
                 onValueChange = vm::onPingUrlChange,
-                label = { Text("URL теста") },
+                label = { Text(stringResource(R.string.ping_url_label)) },
                 singleLine = true,
                 colors = fieldColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
             GradientButton(
-                text = "Сохранить URL",
+                text = stringResource(R.string.ping_url_save),
                 onClick = vm::savePingUrl,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -130,7 +144,7 @@ private fun PingModeRow(mode: PingMode, onSelect: (PingMode) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Режим (via)",
+            text = stringResource(R.string.ping_mode_row),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
             color = InfinityColors.OnSurface,
@@ -156,7 +170,7 @@ private fun PingModeRow(mode: PingMode, onSelect: (PingMode) -> Unit) {
 @Composable
 private fun PingTimeoutSlider(sec: Int, onChange: (Int) -> Unit, onCommit: () -> Unit) {
     Text(
-        text = "ТАЙМАУТ ПРОКСИ-ПИНГА",
+        text = stringResource(R.string.ping_section_timeout),
         style = EyebrowStyle,
         color = InfinityColors.Muted,
         modifier = Modifier.padding(bottom = 4.dp),
@@ -177,7 +191,12 @@ private fun PingTimeoutSlider(sec: Int, onChange: (Int) -> Unit, onCommit: () ->
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text("${PingSettings.MIN_TIMEOUT_SEC}", style = MaterialTheme.typography.bodySmall, color = InfinityColors.Muted)
-        Text("${sec}s", style = MaterialTheme.typography.bodySmall, color = InfinityColors.OnSurface, fontWeight = FontWeight.SemiBold)
+        Text(
+            stringResource(R.string.ping_seconds_short, sec),
+            style = MaterialTheme.typography.bodySmall,
+            color = InfinityColors.OnSurface,
+            fontWeight = FontWeight.SemiBold,
+        )
         Text("${PingSettings.MAX_TIMEOUT_SEC}", style = MaterialTheme.typography.bodySmall, color = InfinityColors.Muted)
     }
 }

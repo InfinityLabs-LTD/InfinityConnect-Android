@@ -131,7 +131,10 @@ fun ProfileScreen(
                     Divider()
                     InfoRow(Icons.Filled.AlternateEmail, stringResource(R.string.profile_email), it)
                 }
-                state.planLabel?.let {
+                // Наш ярлык тарифа локализован (ID строки); если ключей в кэше
+                // нет — показываем plan_name от сервера как есть.
+                val plan = state.planLabelRes?.let { stringResource(it) } ?: state.planNameRaw
+                plan?.let {
                     Divider()
                     InfoRow(Icons.Filled.VpnKey, stringResource(R.string.profile_plan), it)
                 }

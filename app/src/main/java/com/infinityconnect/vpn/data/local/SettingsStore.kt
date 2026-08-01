@@ -11,6 +11,7 @@ import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.PingMode
 import com.infinityconnect.vpn.domain.model.PingSettings
 import com.infinityconnect.vpn.domain.model.AppRoutingMode
+import com.infinityconnect.vpn.domain.model.Language
 import com.infinityconnect.vpn.domain.model.RoutingMode
 import com.infinityconnect.vpn.domain.model.RoutingSettings
 import com.infinityconnect.vpn.domain.model.SitePreset
@@ -41,6 +42,21 @@ class SettingsStore @Inject constructor(
     val discoveryJson: Flow<DiscoveryDto?> = context.dataStore.data.map { prefs ->
         prefs[KEY_DISCOVERY]?.let { runCatching { json.decodeFromString<DiscoveryDto>(it) }.getOrNull() }
     }
+
+    /**
+     * Выбранный язык интерфейса. Пустое значение = «Системный».
+     *
+     * Применяет язык [com.infinityconnect.vpn.ui.util.LanguageController]; здесь
+     * выбор хранится, чтобы восстановить его на API < 33 при старте и чтобы
+     * экран настроек показывал отметку до первого применения.
+     */
+    val language: Flow<Language> = context.dataStore.data.map { Language.from(it[KEY_LANGUAGE]) }
+
+    suspend fun setLanguage(language: Language) {
+        context.dataStore.edit { it[KEY_LANGUAGE] = language.tag }
+    }
+
+    suspend fun currentLanguage(): Language = language.first()
 
     /** Настройки маршрутизации (режим + внешние правила + per-app + домены). */
     val routing: Flow<RoutingSettings> = context.dataStore.data.map { prefs ->
@@ -218,6 +234,7 @@ class SettingsStore @Inject constructor(
         val KEY_DOMAIN = stringPreferencesKey("server_domain")
         val KEY_DISCOVERY = stringPreferencesKey("discovery_json")
         val KEY_KEYS_JSON = stringPreferencesKey("keys_json")
+        val KEY_LANGUAGE = stringPreferencesKey("ui_language")
         val KEY_ROUTING_MODE = stringPreferencesKey("routing_mode")
         val KEY_ROUTING_RULES_URL = stringPreferencesKey("routing_rules_url")
         val KEY_ROUTING_RULES_JSON = stringPreferencesKey("routing_rules_json")

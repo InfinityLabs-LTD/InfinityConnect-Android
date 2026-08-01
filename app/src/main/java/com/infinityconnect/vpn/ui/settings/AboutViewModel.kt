@@ -3,11 +3,13 @@ package com.infinityconnect.vpn.ui.settings
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.AppError
 import com.infinityconnect.vpn.domain.model.AppResult
 import com.infinityconnect.vpn.domain.model.ClientUpdate
 import com.infinityconnect.vpn.domain.usecase.CheckClientUpdateUseCase
 import com.infinityconnect.vpn.domain.usecase.DownloadClientUpdateUseCase
+import com.infinityconnect.vpn.ui.util.ErrorMessage
 import com.infinityconnect.vpn.util.ApkInstaller
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +25,7 @@ sealed interface UpdateUiState {
     data object UpToDate : UpdateUiState
     data class Available(val update: ClientUpdate) : UpdateUiState
     data class Downloading(val update: ClientUpdate, val progress: Float) : UpdateUiState
-    data class Error(val message: String) : UpdateUiState
+    data class Error(val message: ErrorMessage) : UpdateUiState
 }
 
 /** VM экрана «О приложении»: проверка/скачивание/установка обновления клиента. */
@@ -73,9 +75,10 @@ class AboutViewModel @Inject constructor(
     }
 }
 
-private fun AppError.toUpdateMessage(): String = when (this) {
-    is AppError.Network -> "Нет соединения с сервером"
-    is AppError.Parse -> message ?: "Файл обновления повреждён"
-    is AppError.Server -> "Ошибка сервера ($code)"
-    else -> "Не удалось проверить обновление"
+private fun AppError.toUpdateMessage(): ErrorMessage = when (this) {
+    is AppError.Network -> ErrorMessage(R.string.update_error_network)
+    // Текст от сервера конкретнее нашей формулировки — показываем его, если есть.
+    is AppError.Parse -> ErrorMessage(R.string.update_error_corrupted, raw = message)
+    is AppError.Server -> ErrorMessage(R.string.update_error_server, listOf(code))
+    else -> ErrorMessage(R.string.update_error_unknown)
 }

@@ -55,6 +55,7 @@ import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.theme.LocalInfinityGradients
 import com.infinityconnect.vpn.domain.model.KeyStatus
 import com.infinityconnect.vpn.domain.model.status
+import com.infinityconnect.vpn.ui.util.errorText
 import com.infinityconnect.vpn.ui.util.formatBytes
 import com.infinityconnect.vpn.ui.util.formatDuration
 import com.infinityconnect.vpn.ui.util.isExpired
@@ -68,6 +69,7 @@ fun HomeScreen(
     onOpenRouting: () -> Unit,
     onOpenPing: () -> Unit,
     onOpenLogs: () -> Unit,
+    onOpenLanguage: () -> Unit,
     onOpenAbout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -86,12 +88,16 @@ fun HomeScreen(
 
     // Snackbar одноразовых уведомлений VM (например, «лимит устройств»).
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
-    androidx.compose.runtime.LaunchedEffect(ui.notice) {
-        ui.notice?.let {
+    // Текст резолвим в композиции: VM хранит ID строки, поэтому уведомление
+    // всегда приходит на текущем языке интерфейса.
+    val noticeText = errorText(ui.notice)
+    androidx.compose.runtime.LaunchedEffect(noticeText) {
+        noticeText?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.noticeShown()
         }
     }
+    val errorMessage = errorText(ui.error)
 
     // Диалог о новой версии. Именно диалог, а не snackbar: обновление легко
     // пропустить, а установка APK — осознанное действие пользователя.
@@ -128,6 +134,7 @@ fun HomeScreen(
                     DrawerItem("🧭", stringResource(R.string.home_drawer_routing)) { closeThen(onOpenRouting) },
                     DrawerItem("📶", stringResource(R.string.home_drawer_ping)) { closeThen(onOpenPing) },
                     DrawerItem("📝", stringResource(R.string.home_drawer_logs)) { closeThen(onOpenLogs) },
+                    DrawerItem("🌐", stringResource(R.string.home_drawer_language)) { closeThen(onOpenLanguage) },
                     DrawerItem("👤", stringResource(R.string.home_drawer_profile)) { closeThen(onOpenProfile) },
                     DrawerItem("ℹ", stringResource(R.string.home_drawer_about)) { closeThen(onOpenAbout) },
                 ),
@@ -170,10 +177,10 @@ fun HomeScreen(
             ui.loadingFirstTime && ui.keys.isEmpty() ->
                 FullScreenLoading(Modifier.padding(padding))
 
-            ui.keys.isEmpty() && ui.error != null ->
+            ui.keys.isEmpty() && errorMessage != null ->
                 FullScreenMessage(
                     title = stringResource(R.string.home_load_failed),
-                    description = ui.error,
+                    description = errorMessage,
                     actionLabel = stringResource(R.string.common_retry),
                     onAction = { viewModel.refresh() },
                     modifier = Modifier.padding(padding),
@@ -524,14 +531,15 @@ private fun StatsRow(stats: com.infinityconnect.vpn.vpn.TunnelStats) {
         // Объём за сессию, а не скорость: плитки подписаны «Скачано»/«Отдано».
         // Скорость в подписи — мгновенная дельта, она часто нулевая (ядра
         // обновляют счётчики реже, чем раз в секунду) и выглядела как «трафика нет».
+        val context = androidx.compose.ui.platform.LocalContext.current
         StatTile(
             stringResource(R.string.home_stat_downloaded),
-            formatBytes(stats.totalDownloadBytes),
+            context.formatBytes(stats.totalDownloadBytes),
             Modifier.weight(1f),
         )
         StatTile(
             stringResource(R.string.home_stat_uploaded),
-            formatBytes(stats.totalUploadBytes),
+            context.formatBytes(stats.totalUploadBytes),
             Modifier.weight(1f),
         )
         StatTile(

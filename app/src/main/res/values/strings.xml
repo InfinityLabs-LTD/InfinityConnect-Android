@@ -16,6 +16,36 @@
     <string name="common_retry">Повторить</string>
     <string name="common_dash">—</string>
 
+    <!-- Ошибки (AppError.toMessage) -->
+    <string name="error_network">Нет соединения с сервером. Проверьте интернет.</string>
+    <string name="error_invalid_credentials">Неверный логин или пароль.</string>
+    <string name="error_unauthorized">Сессия истекла. Войдите заново.</string>
+    <string name="error_server">Ошибка сервера (код %1$d). Попробуйте позже.</string>
+    <string name="error_parse">Некорректный ответ сервера.</string>
+    <string name="error_unknown">Непредвиденная ошибка.</string>
+    <string name="error_link_unavailable">Ссылка недоступна</string>
+    <string name="error_link_open_failed">Не удалось открыть ссылку</string>
+
+    <!-- Ошибки проверки/скачивания обновления -->
+    <string name="update_error_network">Нет соединения с сервером</string>
+    <string name="update_error_corrupted">Файл обновления повреждён</string>
+    <string name="update_error_server">Ошибка сервера (%1$d)</string>
+    <string name="update_error_unknown">Не удалось проверить обновление</string>
+
+    <!-- Единицы измерения трафика и скорости -->
+    <string name="unit_bytes">%1$d Б</string>
+    <string name="unit_kb">КБ</string>
+    <string name="unit_mb">МБ</string>
+    <string name="unit_gb">ГБ</string>
+    <string name="unit_tb">ТБ</string>
+    <!-- %1$s — уже отформатированный объём, например «12,3 МБ» -->
+    <string name="unit_per_second">%1$s/с</string>
+
+    <!-- ================= Уведомление VPN-сервиса ================= -->
+    <string name="vpn_channel_name">VPN-соединение</string>
+    <string name="vpn_channel_description">Статус VPN-туннеля Infinity Connect</string>
+    <string name="vpn_notification_disconnect">Отключить</string>
+
     <!-- ================= Главный экран ================= -->
     <string name="home_title">Infinity Connect</string>
     <string name="home_menu">Меню</string>
@@ -26,6 +56,7 @@
     <string name="home_drawer_routing">Маршрутизация</string>
     <string name="home_drawer_ping">Пинг</string>
     <string name="home_drawer_logs">Логи</string>
+    <string name="home_drawer_language">Язык</string>
     <string name="home_drawer_profile">Профиль</string>
     <string name="home_drawer_about">О приложении</string>
     <string name="home_drawer_brand_top">Infinity</string>
@@ -89,6 +120,14 @@
     <string name="home_key_traffic">%1$s / %2$s</string>
     <string name="home_key_devices">Устройств: %1$d / %2$d</string>
 
+    <!-- Причина, по которой ключ недоступен для подключения -->
+    <string name="home_blocked_unavailable">Подписка недоступна</string>
+    <string name="home_blocked_expired">Срок подписки истёк</string>
+    <string name="home_blocked_disabled">Подписка отключена</string>
+    <string name="home_blocked_device_limit">Достигнут лимит устройств этой подписки</string>
+    <string name="home_blocked_traffic_limit">Достигнут лимит трафика этой подписки</string>
+    <string name="home_ping_needs_disconnect">Отключитесь от VPN, чтобы измерить пинг</string>
+
     <!-- Строка сервера -->
     <string name="home_server_blocked">Недоступно</string>
     <string name="home_server_fastest">⚡ Быстрейший</string>
@@ -113,6 +152,11 @@
     <string name="auth_submit">Войти</string>
     <string name="auth_register">Регистрация</string>
     <string name="auth_forgot_password">Забыли пароль?</string>
+    <string name="auth_error_empty_fields">Введите логин и пароль</string>
+
+    <!-- ================= Splash / стартовая ошибка ================= -->
+    <string name="splash_no_connection_title">Нет соединения с сервером</string>
+    <string name="splash_no_connection_description">Проверьте интернет и попробуйте снова.</string>
 
     <!-- ================= Профиль ================= -->
     <string name="profile_title">Профиль</string>
@@ -140,6 +184,136 @@
     <string name="profile_login">Логин</string>
     <string name="profile_email">E-mail</string>
     <string name="profile_plan">Тариф</string>
+    <string name="profile_load_failed">Не удалось загрузить профиль</string>
+    <string name="profile_plan_base">Базовый</string>
+    <string name="profile_plan_premium">Премиум</string>
+    <string name="profile_plan_base_premium">Базовый + Премиум</string>
     <string name="profile_support">Написать в поддержку</string>
     <string name="profile_logout">Выйти</string>
+
+    <!-- ================= Настройки: хаб ================= -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_routing">Маршрутизация</string>
+    <string name="settings_routing_desc">По приложениям и по сайтам</string>
+    <string name="settings_ping">Настройки пинга</string>
+    <string name="settings_ping_desc">Протокол, режим, таймаут и URL-тест</string>
+    <string name="settings_logs">Логи</string>
+    <string name="settings_logs_desc">Журнал приложения и ядер, отправка в поддержку</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_language_desc">Язык интерфейса приложения</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_about_desc">Версия, ядра, разработчик</string>
+
+    <!-- ================= Настройки: язык ================= -->
+    <string name="language_title">Язык</string>
+    <string name="language_section">ЯЗЫК ИНТЕРФЕЙСА</string>
+    <string name="language_system">Системный</string>
+    <string name="language_system_desc">Как в настройках устройства</string>
+    <!-- Названия языков намеренно НЕ переводятся: они одинаковы в обеих локалях. -->
+    <string name="language_russian">Русский</string>
+    <string name="language_russian_desc">Русский язык интерфейса</string>
+    <string name="language_english">English</string>
+    <string name="language_english_desc">English interface language</string>
+    <string name="language_hint">Приложение перезапустит экран, чтобы применить язык. Подключение при этом не разрывается.</string>
+
+    <!-- ================= Настройки: маршрутизация ================= -->
+    <string name="routing_title">Маршрутизация</string>
+    <string name="routing_section_apps">ПО ПРИЛОЖЕНИЯМ</string>
+    <string name="routing_apps_off">Выключено</string>
+    <string name="routing_apps_off_desc">Весь трафик приложений — по общим правилам</string>
+    <string name="routing_apps_allow">Только выбранные — через VPN</string>
+    <string name="routing_apps_allow_desc">Остальные приложения идут напрямую</string>
+    <string name="routing_apps_disallow">Все, кроме выбранных</string>
+    <string name="routing_apps_disallow_desc">Выбранные приложения идут напрямую (в обход VPN)</string>
+    <string name="routing_apps_choose">Выбрать приложения (%1$d)</string>
+    <string name="routing_section_presets">ПРЕСЕТЫ САЙТОВ</string>
+    <string name="routing_presets_hint">Готовые наборы сайтов — можно включить несколько сразу. Действуют на VLESS-серверах.</string>
+    <string name="routing_section_sites">ПО САЙТАМ</string>
+    <string name="routing_sites_hint">Доменные правила применяются на VLESS-серверах. На серверах Hysteria2 список сайтов не действует.</string>
+    <string name="routing_sites_off">Выключено</string>
+    <string name="routing_sites_off_desc">Список доменов не используется</string>
+    <string name="routing_sites_proxy">Домены — через VPN</string>
+    <string name="routing_sites_proxy_desc">Указанные сайты идут через VPN, остальное — по общему режиму</string>
+    <string name="routing_sites_direct">Домены — напрямую</string>
+    <string name="routing_sites_direct_desc">Указанные сайты идут в обход VPN</string>
+    <string name="routing_sites_label">Домены (по одному на строку)</string>
+    <string name="routing_sites_placeholder">youtube.com\nnetflix.com</string>
+    <string name="routing_sites_save">Сохранить список</string>
+    <!-- Внешние правила: экран их не показывает, строка нужна SettingsViewModel -->
+    <string name="routing_rules_downloaded">Правила загружены</string>
+
+    <!-- Пресеты доменной маршрутизации (SitePreset) -->
+    <string name="preset_ru_direct">Российские сайты — напрямую</string>
+    <string name="preset_ru_direct_desc">Зоны .ru/.su/.рф и популярные RU-сервисы идут в обход VPN</string>
+    <string name="preset_banks_direct">Банки и Госуслуги — напрямую</string>
+    <string name="preset_banks_direct_desc">Банковские приложения и госсервисы часто блокируют зарубежные IP</string>
+    <string name="preset_ru_services_direct">RU-сервисы — напрямую</string>
+    <string name="preset_ru_services_direct_desc">VK, Яндекс, Ozon, Wildberries, Avito и другие — в обход VPN</string>
+    <string name="preset_streaming_proxy">YouTube и стриминги — через VPN</string>
+    <string name="preset_streaming_proxy_desc">YouTube, Netflix, Twitch и др. всегда идут через VPN</string>
+    <string name="preset_social_proxy">Соцсети и мессенджеры — через VPN</string>
+    <string name="preset_social_proxy_desc">Instagram, Facebook, X (Twitter), Telegram, Discord — всегда через VPN</string>
+
+    <!-- ================= Настройки: выбор приложений ================= -->
+    <string name="apps_title">Приложения</string>
+    <string name="apps_search">Поиск</string>
+    <string name="apps_empty">Приложения не найдены</string>
+    <!-- Суффикс после имени пакета у системных приложений -->
+    <string name="apps_system_suffix"> · системное</string>
+
+    <!-- ================= Настройки: пинг ================= -->
+    <string name="ping_title">Настройки пинга</string>
+    <string name="ping_section_methods">ПРОТОКОЛЫ ПИНГА</string>
+    <!-- Пример значения рядом с заголовком: показывает цвет текущего метода -->
+    <string name="ping_sample_ms">132 мс</string>
+    <string name="ping_mode_row">Режим (via)</string>
+    <string name="ping_mode_hint">default — берётся лучший из нескольких запросов.\ndouble — запрос выполняется дважды в рамках одной сессии ядра; замеряется второй.\nkeepalive — второй запрос замеряет чистую скорость ответа через уже установленное TLS-соединение.</string>
+    <string name="ping_section_timeout">ТАЙМАУТ ПРОКСИ-ПИНГА</string>
+    <string name="ping_seconds_short">%1$dс</string>
+    <string name="ping_section_url">НАСТРОЙКИ URL-ТЕСТА</string>
+    <string name="ping_url_hint">URL для прокси-методов (GET/HEAD).</string>
+    <string name="ping_url_label">URL теста</string>
+    <string name="ping_url_save">Сохранить URL</string>
+    <string name="ping_method_proxy_get">Через прокси (GET)</string>
+    <string name="ping_method_proxy_get_desc">HTTP GET к тест-URL через сам протокол сервера (ядро Xray): полный ответ. Самый точный, но значения выше. Для Hysteria2 — откат на TCP.</string>
+    <string name="ping_method_proxy_head">Через прокси (HEAD)</string>
+    <string name="ping_method_proxy_head_desc">HTTP HEAD к тест-URL через протокол сервера: только заголовки, без тела. Легче GET, значения чуть ниже. Для Hysteria2 — откат на TCP.</string>
+    <string name="ping_method_tcp">TCP</string>
+    <string name="ping_method_tcp_desc">Время TCP-подключения к серверу (host:port). Чистая задержка до узла, без HTTP/TLS.</string>
+    <string name="ping_method_icmp">ICMP</string>
+    <string name="ping_method_icmp_desc">ICMP echo (ping) до адреса сервера. Сетевой RTT; часть сетей блокирует ICMP.</string>
+
+    <!-- ================= Настройки: логи ================= -->
+    <string name="logs_title">Логи</string>
+    <string name="logs_share">Поделиться журналом</string>
+    <string name="logs_clear">Очистить журнал</string>
+    <string name="logs_share_subject">Журнал Infinity Connect</string>
+    <string name="logs_share_clip">Журнал</string>
+    <string name="logs_share_chooser">Отправить журнал</string>
+    <string name="logs_filter_all">Все</string>
+    <string name="logs_filter_info">Инфо</string>
+    <string name="logs_filter_warn">Предупреждения</string>
+    <string name="logs_filter_error">Ошибки</string>
+    <string name="logs_empty">Журнал пуст — события появятся при подключении</string>
+    <string name="logs_empty_filtered">Нет записей выбранного уровня</string>
+    <string name="logs_export_failed">Не удалось подготовить файл журнала</string>
+    <string name="logs_cleared">Журнал очищен</string>
+
+    <!-- ================= Настройки: о приложении ================= -->
+    <string name="about_title">О приложении</string>
+    <string name="about_section_app">О ПРИЛОЖЕНИИ</string>
+    <string name="about_app">Приложение</string>
+    <string name="about_app_value">Infinity Connect</string>
+    <string name="about_developer">Разработчик</string>
+    <string name="about_version">Версия</string>
+    <string name="about_version_value">%1$s (%2$d)</string>
+    <string name="about_core_xray">Ядро Xray</string>
+    <string name="about_core_hysteria">Ядро Hysteria2</string>
+    <string name="about_section_update">ОБНОВЛЕНИЕ</string>
+    <string name="about_up_to_date">У вас последняя версия</string>
+    <string name="about_check_update">Проверить обновление</string>
+    <string name="about_checking">Проверка обновления…</string>
+    <string name="about_update_available">Доступна версия %1$s (%2$d)</string>
+    <string name="about_update_download">Скачать и установить</string>
+    <string name="about_downloading">Скачивание версии %1$s…</string>
 </resources>
