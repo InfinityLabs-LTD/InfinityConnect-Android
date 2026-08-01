@@ -22,8 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.KeyStatus
 import com.infinityconnect.vpn.domain.model.PingMethod
 import com.infinityconnect.vpn.domain.model.SubscriptionServer
@@ -83,7 +85,11 @@ fun KeyCard(
                 if (key.trafficLimitBytes != null && key.trafficLimitBytes > 0) {
                     val used = key.usedTrafficBytes ?: 0
                     Text(
-                        text = "${formatBytes(used)} / ${formatBytes(key.trafficLimitBytes)}",
+                        text = stringResource(
+                            R.string.home_key_traffic,
+                            formatBytes(used),
+                            formatBytes(key.trafficLimitBytes),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (key.trafficExhausted) InfinityColors.Coral else InfinityColors.MutedDim,
                     )
@@ -91,7 +97,11 @@ fun KeyCard(
                 // Лимит устройств — показываем только если сервер прислал данные.
                 if (key.deviceLimit != null && key.deviceLimit > 0) {
                     Text(
-                        text = "Устройств: ${key.devicesUsed ?: 0} / ${key.deviceLimit}",
+                        text = stringResource(
+                            R.string.home_key_devices,
+                            key.devicesUsed ?: 0,
+                            key.deviceLimit,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (key.devicesExhausted) InfinityColors.Coral else InfinityColors.MutedDim,
                     )
@@ -105,8 +115,7 @@ fun KeyCard(
 /** Компактный чип протокола (VLESS / Hysteria2). */
 @Composable
 private fun ProtocolChip(protocol: VpnProtocol) {
-    val label = protocolLabel(protocol)
-    if (label == "—") return
+    val label = protocolLabel(protocol) ?: return
     Text(
         text = label,
         style = MaterialTheme.typography.labelSmall,
@@ -147,27 +156,37 @@ private fun statusTextColor(status: KeyStatus): Color = when (status) {
 }
 
 /** Строка статуса под названием ключа. */
+@Composable
 private fun keyStatusLine(status: KeyStatus, expiresAt: String?): String = when (status) {
-    KeyStatus.ACTIVE -> if (expiresAt.isNullOrBlank()) "Активна" else "Активна до ${formatDate(expiresAt)}"
-    KeyStatus.EXPIRED -> if (expiresAt.isNullOrBlank()) "Срок истёк" else "Истекла ${formatDate(expiresAt)}"
-    KeyStatus.DISABLED -> "Отключена"
-    KeyStatus.LIMITED -> "Достигнут лимит"
+    KeyStatus.ACTIVE ->
+        if (expiresAt.isNullOrBlank()) stringResource(R.string.home_key_active)
+        else stringResource(R.string.home_key_active_until, formatDate(expiresAt))
+    KeyStatus.EXPIRED ->
+        if (expiresAt.isNullOrBlank()) stringResource(R.string.home_key_expired)
+        else stringResource(R.string.home_key_expired_at, formatDate(expiresAt))
+    KeyStatus.DISABLED -> stringResource(R.string.home_key_disabled)
+    KeyStatus.LIMITED -> stringResource(R.string.home_key_limited)
 }
 
 /**
  * Заголовок ключа: порядковый номер у пользователя, а название — в скобках,
  * если оно есть и осмысленно (не совпадает с дефолтным «Ключ #id»).
  */
+@Composable
 private fun keyTitle(number: Int, name: String): String {
     val label = name.trim()
-    val hasName = label.isNotBlank() && !label.startsWith("Ключ #")
-    return if (hasName) "Ключ $number ($label)" else "Ключ $number"
+    // Дефолтное имя с сервера («Ключ #12») в заголовок не выносим — это шум.
+    val hasName = label.isNotBlank() &&
+        !label.startsWith(stringResource(R.string.home_key_default_prefix))
+    return if (hasName) stringResource(R.string.home_key_title_named, number, label)
+    else stringResource(R.string.home_key_title, number)
 }
 
-private fun protocolLabel(p: VpnProtocol): String = when (p) {
+/** Имя протокола — бренды, не переводятся. null у неизвестного (чип не рисуем). */
+private fun protocolLabel(p: VpnProtocol): String? = when (p) {
     VpnProtocol.VLESS -> "VLESS"
     VpnProtocol.HYSTERIA2 -> "Hysteria2"
-    VpnProtocol.UNKNOWN -> "—"
+    VpnProtocol.UNKNOWN -> null
 }
 
 /**
@@ -204,7 +223,7 @@ fun ServerRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        EmojiBadge(emoji = server.flag ?: "🌐", size = 38.dp)
+        EmojiBadge(emoji = server.flag ?: stringResource(R.string.home_globe_fallback), size = 38.dp)
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
@@ -223,7 +242,7 @@ fun ServerRow(
             )
         }
         if (blocked) {
-            StatusPill(text = "Недоступно", color = InfinityColors.Amber)
+            StatusPill(text = stringResource(R.string.home_server_blocked), color = InfinityColors.Amber)
         } else {
             PingLabel(server.pingMs, pingMethod)
         }
@@ -237,9 +256,9 @@ fun ServerRow(
 @Composable
 private fun PingLabel(pingMs: Int?, method: PingMethod) {
     val text = when {
-        pingMs == null -> "…"
-        pingMs < 0 -> "—"
-        else -> "$pingMs мс"
+        pingMs == null -> stringResource(R.string.home_ping_measuring)
+        pingMs < 0 -> stringResource(R.string.home_ping_unavailable)
+        else -> stringResource(R.string.home_ping_ms, pingMs)
     }
     StatusPill(text = text, color = pingColor(method, pingMs))
 }
@@ -248,7 +267,7 @@ private fun PingLabel(pingMs: Int?, method: PingMethod) {
 @Composable
 private fun FastestBadge() {
     Text(
-        text = "⚡ Быстрейший",
+        text = stringResource(R.string.home_server_fastest),
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
         color = InfinityColors.Mint,

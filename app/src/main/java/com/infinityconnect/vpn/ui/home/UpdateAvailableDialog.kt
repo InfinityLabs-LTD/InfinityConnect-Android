@@ -21,8 +21,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.ClientUpdate
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.util.formatBytes
@@ -53,7 +55,7 @@ fun UpdateAvailableDialog(
         textContentColor = InfinityColors.Muted,
         title = {
             Text(
-                "Доступно обновление",
+                stringResource(R.string.home_update_title),
                 fontWeight = FontWeight.Bold,
                 color = InfinityColors.OnSurface,
             )
@@ -61,7 +63,7 @@ fun UpdateAvailableDialog(
         text = {
             Column {
                 Text(
-                    "Версия ${update.version} (${update.versionCode})",
+                    stringResource(R.string.home_update_version, update.version, update.versionCode),
                     color = InfinityColors.OnSurface,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
@@ -76,7 +78,7 @@ fun UpdateAvailableDialog(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Размер: ${formatBytes(update.sizeBytes)}",
+                    stringResource(R.string.home_update_size, formatBytes(update.sizeBytes)),
                     color = InfinityColors.MutedDim,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -101,7 +103,7 @@ fun UpdateAvailableDialog(
                         ),
                     )
                     Text(
-                        "Не напоминать об этой версии",
+                        stringResource(R.string.home_update_skip),
                         color = InfinityColors.Muted,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(start = 2.dp),
@@ -112,7 +114,7 @@ fun UpdateAvailableDialog(
         confirmButton = {
             TextButton(onClick = { onUpdate(skip) }) {
                 Text(
-                    "Обновить",
+                    stringResource(R.string.home_update_confirm),
                     color = InfinityColors.AccentBlue,
                     fontWeight = FontWeight.Bold,
                 )
@@ -120,7 +122,7 @@ fun UpdateAvailableDialog(
         },
         dismissButton = {
             TextButton(onClick = { onDismiss(skip) }) {
-                Text("Позже", color = InfinityColors.Muted)
+                Text(stringResource(R.string.home_update_later), color = InfinityColors.Muted)
             }
         },
     )

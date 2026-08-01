@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinityconnect.vpn.R
@@ -75,13 +76,13 @@ fun AppDrawer(
                 )
                 Column {
                     Text(
-                        text = "Infinity",
+                        text = stringResource(R.string.home_drawer_brand_top),
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
                         color = InfinityColors.OnSurface,
                     )
                     Text(
-                        text = "Connect",
+                        text = stringResource(R.string.home_drawer_brand_bottom),
                         style = MaterialTheme.typography.bodySmall,
                         color = InfinityColors.Muted,
                     )
@@ -118,7 +119,10 @@ fun AppDrawer(
                         .background(if (connected) InfinityColors.Mint else InfinityColors.MutedDim),
                 )
                 Text(
-                    text = if (connected) "Подключено" else "Отключено",
+                    text = stringResource(
+                        if (connected) R.string.home_drawer_connected
+                        else R.string.home_drawer_disconnected,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (connected) InfinityColors.Mint else InfinityColors.Muted,
                 )

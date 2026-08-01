@@ -72,6 +72,26 @@
                 android:value="VPN-туннель Infinity Connect" />
         </service>
 
+        <!--
+            Плитка быстрых настроек (шторка): подключение/отключение VPN.
+
+            android:process НЕ указан намеренно — плитка должна жить в
+            UI-процессе, а не в ":vpn". Она читает состояние туннеля из
+            VpnStateHolder UI-процесса (наполняется VpnStateBridge) и шлёт
+            команды через VpnController; поднимать ради неё процесс с Go-ядром
+            незачем.
+        -->
+        <service
+            android:name=".vpn.VpnTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_logo"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- Выдача скачанного APK-обновления системному установщику -->
         <provider
             android:name="androidx.core.content.FileProvider"

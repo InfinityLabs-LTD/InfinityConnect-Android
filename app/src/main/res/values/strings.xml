@@ -1,3 +1,143 @@
 <resources>
     <string name="app_name">Infinity Connect</string>
+
+    <!-- ================= Плитка быстрых настроек (шторка) ================= -->
+    <string name="tile_label">Infinity VPN</string>
+    <string name="tile_connected">Подключено</string>
+    <string name="tile_connecting">Подключение…</string>
+    <string name="tile_disconnecting">Отключение…</string>
+    <string name="tile_error">Ошибка</string>
+
+    <!-- ================= Общее ================= -->
+    <string name="common_back">Назад</string>
+    <string name="common_refresh">Обновить</string>
+    <string name="common_retry">Повторить</string>
+    <string name="common_dash">—</string>
+
+    <!-- ================= Главный экран ================= -->
+    <string name="home_title">Infinity Connect</string>
+    <string name="home_menu">Меню</string>
+    <string name="home_refresh_subscriptions">Обновить подписки</string>
+
+    <!-- Боковое меню -->
+    <string name="home_drawer_connection">Подключение</string>
+    <string name="home_drawer_routing">Маршрутизация</string>
+    <string name="home_drawer_ping">Пинг</string>
+    <string name="home_drawer_logs">Логи</string>
+    <string name="home_drawer_profile">Профиль</string>
+    <string name="home_drawer_about">О приложении</string>
+    <string name="home_drawer_brand_top">Infinity</string>
+    <string name="home_drawer_brand_bottom">Connect</string>
+    <string name="home_drawer_connected">Подключено</string>
+    <string name="home_drawer_disconnected">Отключено</string>
+
+    <!-- Пустые состояния и ошибки списка -->
+    <string name="home_load_failed">Не удалось загрузить</string>
+    <string name="home_no_keys_title">Нет доступных ключей</string>
+    <string name="home_no_keys_description">У вашего аккаунта пока нет активных подписок. Оформите подписку на сайте — ключи появятся автоматически.</string>
+
+    <!-- Hero-блок подключения -->
+    <string name="home_status_connected">Подключено</string>
+    <string name="home_status_connecting">Подключение…</string>
+    <string name="home_status_disconnecting">Отключение…</string>
+    <string name="home_status_disconnected">Не подключено</string>
+    <string name="home_status_error">Ошибка</string>
+    <string name="home_hero_disconnect">Отключить</string>
+    <string name="home_hero_connect">Подключить</string>
+    <string name="home_pick_server">Выберите сервер</string>
+    <string name="home_tap_to_connect">Нажмите, чтобы подключиться</string>
+    <string name="home_globe_fallback">🌐</string>
+
+    <!-- Статистика сессии -->
+    <string name="home_stat_downloaded">↓ Скачано</string>
+    <string name="home_stat_uploaded">↑ Отдано</string>
+    <string name="home_stat_time">Время</string>
+
+    <!-- Список подписок -->
+    <string name="home_my_subscriptions">МОИ ПОДПИСКИ</string>
+    <string name="home_ping_running">Пинг…</string>
+    <string name="home_ping_all">Пинг всех</string>
+    <string name="home_servers_loading">Загрузка серверов…</string>
+    <string name="home_no_servers">Нет серверов</string>
+    <!-- %1$s — «5 серверов» из plurals home_server_count -->
+    <string name="home_collapsed_summary">%1$s · нажмите, чтобы выбрать</string>
+    <plurals name="home_server_count">
+        <item quantity="one">%d сервер</item>
+        <item quantity="few">%d сервера</item>
+        <item quantity="many">%d серверов</item>
+        <item quantity="other">%d сервера</item>
+    </plurals>
+
+    <!-- Баннер «нет активных подписок» -->
+    <string name="home_no_active_title">Нет активных подписок</string>
+    <string name="home_no_active_description">Все ключи истекли, отключены или достигли лимита. Продлите подписку на сайте — доступ восстановится автоматически.</string>
+
+    <!-- Карточка ключа -->
+    <!-- Дефолтное имя ключа с сервера: если название начинается с этого префикса,
+         оно не осмысленно и в заголовок не выносится (см. keyTitle). -->
+    <string name="home_key_default_prefix">Ключ #</string>
+    <string name="home_key_title">Ключ %1$d</string>
+    <string name="home_key_title_named">Ключ %1$d (%2$s)</string>
+    <string name="home_key_active">Активна</string>
+    <string name="home_key_active_until">Активна до %1$s</string>
+    <string name="home_key_expired">Срок истёк</string>
+    <string name="home_key_expired_at">Истекла %1$s</string>
+    <string name="home_key_disabled">Отключена</string>
+    <string name="home_key_limited">Достигнут лимит</string>
+    <string name="home_key_traffic">%1$s / %2$s</string>
+    <string name="home_key_devices">Устройств: %1$d / %2$d</string>
+
+    <!-- Строка сервера -->
+    <string name="home_server_blocked">Недоступно</string>
+    <string name="home_server_fastest">⚡ Быстрейший</string>
+    <string name="home_ping_measuring">…</string>
+    <string name="home_ping_unavailable">—</string>
+    <string name="home_ping_ms">%1$d мс</string>
+    <string name="home_ping_best_ms">⚡ %1$d мс</string>
+
+    <!-- Диалог обновления -->
+    <string name="home_update_title">Доступно обновление</string>
+    <string name="home_update_version">Версия %1$s (%2$d)</string>
+    <string name="home_update_size">Размер: %1$s</string>
+    <string name="home_update_skip">Не напоминать об этой версии</string>
+    <string name="home_update_confirm">Обновить</string>
+    <string name="home_update_later">Позже</string>
+
+    <!-- ================= Экран входа ================= -->
+    <string name="auth_title">Infinity Connect</string>
+    <string name="auth_subtitle">Войдите, чтобы подключиться</string>
+    <string name="auth_login_hint">Логин</string>
+    <string name="auth_password_hint">Пароль</string>
+    <string name="auth_submit">Войти</string>
+    <string name="auth_register">Регистрация</string>
+    <string name="auth_forgot_password">Забыли пароль?</string>
+
+    <!-- ================= Профиль ================= -->
+    <string name="profile_title">Профиль</string>
+    <string name="profile_subscription_active">Подписка активна</string>
+    <string name="profile_subscription_inactive">Подписка неактивна</string>
+    <string name="profile_subscription_eyebrow">ПОДПИСКА</string>
+    <string name="profile_subscription_off">Неактивна</string>
+    <string name="profile_subscription_on">Активна</string>
+    <!-- %1$s — «12 дней» из plurals profile_days -->
+    <string name="profile_days_left">Осталось %1$s</string>
+    <string name="profile_until">до %1$s</string>
+    <plurals name="profile_days">
+        <item quantity="one">%d день</item>
+        <item quantity="few">%d дня</item>
+        <item quantity="many">%d дней</item>
+        <item quantity="other">%d дня</item>
+    </plurals>
+    <string name="profile_key_expired">Истекла</string>
+    <string name="profile_key_forever">Бессрочно</string>
+    <string name="profile_metric_keys">Ключей</string>
+    <string name="profile_metric_months">Месяцев</string>
+    <string name="profile_metric_spent">Потрачено</string>
+    <string name="profile_money">%1$s ₽</string>
+    <string name="profile_section_account">Аккаунт</string>
+    <string name="profile_login">Логин</string>
+    <string name="profile_email">E-mail</string>
+    <string name="profile_plan">Тариф</string>
+    <string name="profile_support">Написать в поддержку</string>
+    <string name="profile_logout">Выйти</string>
 </resources>

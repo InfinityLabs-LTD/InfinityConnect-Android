@@ -26,7 +26,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.vpn.TunnelState
 
@@ -173,7 +175,9 @@ fun ConnectHero(
             }
             Icon(
                 imageVector = Icons.Filled.PowerSettingsNew,
-                contentDescription = if (connected) "Отключить" else "Подключить",
+                contentDescription = stringResource(
+                    if (connected) R.string.home_hero_disconnect else R.string.home_hero_connect,
+                ),
                 tint = Color.White,
                 modifier = Modifier.size(iconSize),
             )

@@ -27,12 +27,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.ui.components.GradientButton
 import com.infinityconnect.vpn.ui.theme.InfinityColors
 import com.infinityconnect.vpn.ui.theme.LocalInfinityGradients
@@ -61,13 +63,13 @@ fun AuthScreen(
         BrandMark()
         Spacer(Modifier.height(20.dp))
         Text(
-            text = "Infinity Connect",
+            text = stringResource(R.string.auth_title),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = InfinityColors.OnSurface,
         )
         Text(
-            text = "Войдите, чтобы подключиться",
+            text = stringResource(R.string.auth_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = InfinityColors.Muted,
             textAlign = TextAlign.Center,
@@ -77,7 +79,7 @@ fun AuthScreen(
         OutlinedTextField(
             value = state.login,
             onValueChange = viewModel::onLoginChange,
-            label = { Text("Логин") },
+            label = { Text(stringResource(R.string.auth_login_hint)) },
             singleLine = true,
             enabled = !state.loading,
             colors = fieldColors(),
@@ -86,7 +88,7 @@ fun AuthScreen(
         OutlinedTextField(
             value = state.password,
             onValueChange = viewModel::onPasswordChange,
-            label = { Text("Пароль") },
+            label = { Text(stringResource(R.string.auth_password_hint)) },
             singleLine = true,
             enabled = !state.loading,
             visualTransformation = PasswordVisualTransformation(),
@@ -106,7 +108,7 @@ fun AuthScreen(
 
         Spacer(Modifier.height(24.dp))
         GradientButton(
-            text = "Войти",
+            text = stringResource(R.string.auth_submit),
             onClick = { viewModel.submit(onLoggedIn) },
             enabled = !state.loading,
             loading = state.loading,
@@ -118,10 +120,10 @@ fun AuthScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             TextButton(onClick = { context.openInBrowser(state.registerUrl) }) {
-                Text("Регистрация", color = InfinityColors.AccentBlue)
+                Text(stringResource(R.string.auth_register), color = InfinityColors.AccentBlue)
             }
             TextButton(onClick = { context.openInBrowser(state.forgotPasswordUrl) }) {
-                Text("Забыли пароль?", color = InfinityColors.AccentBlue)
+                Text(stringResource(R.string.auth_forgot_password), color = InfinityColors.AccentBlue)
             }
         }
     }

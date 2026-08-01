@@ -43,10 +43,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.domain.model.UserInfo
 import com.infinityconnect.vpn.ui.components.FullScreenLoading
 import com.infinityconnect.vpn.ui.components.GlassCard
@@ -72,11 +75,14 @@ fun ProfileScreen(
         containerColor = Color.Transparent,
         topBar = {
             androidx.compose.material3.TopAppBar(
-                title = { Text("Профиль", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.profile_title), fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
             )
@@ -113,17 +119,21 @@ fun ProfileScreen(
             )
 
             // --- Аккаунт ---
-            SectionCard(title = "Аккаунт", icon = Icons.Filled.AlternateEmail) {
-                InfoRow(Icons.Filled.WorkspacePremium, "Логин", state.user?.username ?: "—")
+            SectionCard(title = stringResource(R.string.profile_section_account), icon = Icons.Filled.AlternateEmail) {
+                InfoRow(
+                    Icons.Filled.WorkspacePremium,
+                    stringResource(R.string.profile_login),
+                    state.user?.username ?: stringResource(R.string.common_dash),
+                )
                 // E-mail показываем только если это действительно похоже на почту:
                 // сервер иногда присылает служебное значение ("admin") — прячем его.
                 state.user?.email?.takeIf(::looksLikeEmail)?.let {
                     Divider()
-                    InfoRow(Icons.Filled.AlternateEmail, "E-mail", it)
+                    InfoRow(Icons.Filled.AlternateEmail, stringResource(R.string.profile_email), it)
                 }
                 state.planLabel?.let {
                     Divider()
-                    InfoRow(Icons.Filled.VpnKey, "Тариф", it)
+                    InfoRow(Icons.Filled.VpnKey, stringResource(R.string.profile_plan), it)
                 }
             }
 
@@ -142,7 +152,7 @@ fun ProfileScreen(
                         tint = InfinityColors.AccentBlue,
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("Написать в поддержку", color = InfinityColors.OnSurface)
+                    Text(stringResource(R.string.profile_support), color = InfinityColors.OnSurface)
                 }
             }
 
@@ -162,7 +172,7 @@ fun ProfileScreen(
                     tint = InfinityColors.Coral,
                 )
                 Spacer(Modifier.width(10.dp))
-                Text("Выйти", color = InfinityColors.Coral)
+                Text(stringResource(R.string.profile_logout), color = InfinityColors.Coral)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -196,14 +206,17 @@ private fun ProfileHero(user: UserInfo?) {
         }
         Spacer(Modifier.height(14.dp))
         Text(
-            text = user?.username ?: "—",
+            text = user?.username ?: stringResource(R.string.common_dash),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = InfinityColors.OnSurface,
         )
         Spacer(Modifier.height(8.dp))
         StatusPill(
-            text = if (active) "Подписка активна" else "Подписка неактивна",
+            text = stringResource(
+                if (active) R.string.profile_subscription_active
+                else R.string.profile_subscription_inactive,
+            ),
             color = if (active) InfinityColors.Mint else InfinityColors.Muted,
         )
     }
@@ -242,7 +255,7 @@ private fun SubscriptionCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "ПОДПИСКА",
+                    text = stringResource(R.string.profile_subscription_eyebrow),
                     style = EyebrowStyle,
                     color = InfinityColors.Muted,
                 )
@@ -258,10 +271,12 @@ private fun SubscriptionCard(
             val remaining = daysUntil(expiresAt)
             Text(
                 text = when {
-                    !active -> "Неактивна"
-                    remaining != null && remaining >= 0 ->
-                        "Осталось $remaining ${plural(remaining, "день", "дня", "дней")}"
-                    else -> "Активна"
+                    !active -> stringResource(R.string.profile_subscription_off)
+                    remaining != null && remaining >= 0 -> stringResource(
+                        R.string.profile_days_left,
+                        pluralStringResource(R.plurals.profile_days, remaining, remaining),
+                    )
+                    else -> stringResource(R.string.profile_subscription_on)
                 },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
@@ -270,7 +285,7 @@ private fun SubscriptionCard(
             if (!expiresAt.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "до ${formatDate(expiresAt)}",
+                    text = stringResource(R.string.profile_until, formatDate(expiresAt)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = InfinityColors.Muted,
                 )
@@ -288,11 +303,27 @@ private fun SubscriptionCard(
             Divider()
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                keysCount?.let { MetricTile("Ключей", it.toString(), Modifier.weight(1f)) }
-                totalMonths?.takeIf { it > 0 }
-                    ?.let { MetricTile("Месяцев", it.toString(), Modifier.weight(1f)) }
-                totalSpent?.takeIf { it > 0 }
-                    ?.let { MetricTile("Потрачено", formatMoney(it), Modifier.weight(1f)) }
+                keysCount?.let {
+                    MetricTile(
+                        stringResource(R.string.profile_metric_keys),
+                        it.toString(),
+                        Modifier.weight(1f),
+                    )
+                }
+                totalMonths?.takeIf { it > 0 }?.let {
+                    MetricTile(
+                        stringResource(R.string.profile_metric_months),
+                        it.toString(),
+                        Modifier.weight(1f),
+                    )
+                }
+                totalSpent?.takeIf { it > 0 }?.let {
+                    MetricTile(
+                        stringResource(R.string.profile_metric_spent),
+                        formatMoney(it),
+                        Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -324,9 +355,10 @@ private fun KeyExpiryRow(key: com.infinityconnect.vpn.domain.model.VpnKey) {
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = when {
-                    expired || !key.isActive -> "Истекла"
-                    remaining != null -> "$remaining ${plural(remaining, "день", "дня", "дней")}"
-                    else -> "Бессрочно"
+                    expired || !key.isActive -> stringResource(R.string.profile_key_expired)
+                    remaining != null ->
+                        pluralStringResource(R.plurals.profile_days, remaining, remaining)
+                    else -> stringResource(R.string.profile_key_forever)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
@@ -334,7 +366,7 @@ private fun KeyExpiryRow(key: com.infinityconnect.vpn.domain.model.VpnKey) {
             )
             key.expiresAt?.takeIf { it.isNotBlank() && !expired && key.isActive }?.let {
                 Text(
-                    text = "до ${formatDate(it)}",
+                    text = stringResource(R.string.profile_until, formatDate(it)),
                     style = MaterialTheme.typography.labelSmall,
                     color = InfinityColors.Muted,
                 )
@@ -432,18 +464,9 @@ private fun looksLikeEmail(s: String): Boolean {
     return at > 0 && t.indexOf('.', at) > at + 1
 }
 
-private fun plural(n: Int, one: String, few: String, many: String): String {
-    val m10 = n % 10
-    val m100 = n % 100
-    return when {
-        m10 == 1 && m100 != 11 -> one
-        m10 in 2..4 && m100 !in 12..14 -> few
-        else -> many
-    }
-}
-
+@Composable
 private fun formatMoney(value: Double): String {
     val rounded = if (value % 1.0 == 0.0) value.toInt().toString()
     else String.format(java.util.Locale.getDefault(), "%.2f", value)
-    return "$rounded ₽"
+    return stringResource(R.string.profile_money, rounded)
 }

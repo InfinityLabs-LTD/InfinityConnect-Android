@@ -1,0 +1,129 @@
+<resources>
+    <!-- Английская локаль. Русская (values/strings.xml) — язык по умолчанию. -->
+
+    <!-- ================= Quick Settings tile ================= -->
+    <string name="tile_label">Infinity VPN</string>
+    <string name="tile_connected">Connected</string>
+    <string name="tile_connecting">Connecting…</string>
+    <string name="tile_disconnecting">Disconnecting…</string>
+    <string name="tile_error">Error</string>
+
+    <!-- ================= Common ================= -->
+    <string name="common_back">Back</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_retry">Try again</string>
+    <string name="common_dash">—</string>
+
+    <!-- ================= Home ================= -->
+    <string name="home_title">Infinity Connect</string>
+    <string name="home_menu">Menu</string>
+    <string name="home_refresh_subscriptions">Refresh subscriptions</string>
+
+    <string name="home_drawer_connection">Connection</string>
+    <string name="home_drawer_routing">Routing</string>
+    <string name="home_drawer_ping">Ping</string>
+    <string name="home_drawer_logs">Logs</string>
+    <string name="home_drawer_profile">Profile</string>
+    <string name="home_drawer_about">About</string>
+    <string name="home_drawer_brand_top">Infinity</string>
+    <string name="home_drawer_brand_bottom">Connect</string>
+    <string name="home_drawer_connected">Connected</string>
+    <string name="home_drawer_disconnected">Disconnected</string>
+
+    <string name="home_load_failed">Couldn\'t load</string>
+    <string name="home_no_keys_title">No keys available</string>
+    <string name="home_no_keys_description">Your account has no active subscriptions yet. Purchase one on the website — keys will appear here automatically.</string>
+
+    <string name="home_status_connected">Connected</string>
+    <string name="home_status_connecting">Connecting…</string>
+    <string name="home_status_disconnecting">Disconnecting…</string>
+    <string name="home_status_disconnected">Not connected</string>
+    <string name="home_status_error">Error</string>
+    <string name="home_hero_disconnect">Disconnect</string>
+    <string name="home_hero_connect">Connect</string>
+    <string name="home_pick_server">Choose a server</string>
+    <string name="home_tap_to_connect">Tap to connect</string>
+    <string name="home_globe_fallback">🌐</string>
+
+    <string name="home_stat_downloaded">↓ Downloaded</string>
+    <string name="home_stat_uploaded">↑ Uploaded</string>
+    <string name="home_stat_time">Time</string>
+
+    <string name="home_my_subscriptions">MY SUBSCRIPTIONS</string>
+    <string name="home_ping_running">Pinging…</string>
+    <string name="home_ping_all">Ping all</string>
+    <string name="home_servers_loading">Loading servers…</string>
+    <string name="home_no_servers">No servers</string>
+    <string name="home_collapsed_summary">%1$s · tap to choose</string>
+    <plurals name="home_server_count">
+        <item quantity="one">%d server</item>
+        <item quantity="other">%d servers</item>
+    </plurals>
+
+    <string name="home_no_active_title">No active subscriptions</string>
+    <string name="home_no_active_description">All keys have expired, been disabled or hit their limit. Renew your subscription on the website — access will be restored automatically.</string>
+
+    <!-- Префикс дефолтного имени ключа приходит с сервера по-русски, поэтому
+         в английской локали он тот же — иначе проверка в keyTitle перестанет
+         срабатывать и в заголовок попадёт служебное «Ключ #12». -->
+    <string name="home_key_default_prefix">Ключ #</string>
+    <string name="home_key_title">Key %1$d</string>
+    <string name="home_key_title_named">Key %1$d (%2$s)</string>
+    <string name="home_key_active">Active</string>
+    <string name="home_key_active_until">Active until %1$s</string>
+    <string name="home_key_expired">Expired</string>
+    <string name="home_key_expired_at">Expired on %1$s</string>
+    <string name="home_key_disabled">Disabled</string>
+    <string name="home_key_limited">Limit reached</string>
+    <string name="home_key_traffic">%1$s / %2$s</string>
+    <string name="home_key_devices">Devices: %1$d / %2$d</string>
+
+    <string name="home_server_blocked">Unavailable</string>
+    <string name="home_server_fastest">⚡ Fastest</string>
+    <string name="home_ping_measuring">…</string>
+    <string name="home_ping_unavailable">—</string>
+    <string name="home_ping_ms">%1$d ms</string>
+    <string name="home_ping_best_ms">⚡ %1$d ms</string>
+
+    <string name="home_update_title">Update available</string>
+    <string name="home_update_version">Version %1$s (%2$d)</string>
+    <string name="home_update_size">Size: %1$s</string>
+    <string name="home_update_skip">Don\'t remind me about this version</string>
+    <string name="home_update_confirm">Update</string>
+    <string name="home_update_later">Later</string>
+
+    <!-- ================= Sign in ================= -->
+    <string name="auth_title">Infinity Connect</string>
+    <string name="auth_subtitle">Sign in to connect</string>
+    <string name="auth_login_hint">Username</string>
+    <string name="auth_password_hint">Password</string>
+    <string name="auth_submit">Sign in</string>
+    <string name="auth_register">Sign up</string>
+    <string name="auth_forgot_password">Forgot password?</string>
+
+    <!-- ================= Profile ================= -->
+    <string name="profile_title">Profile</string>
+    <string name="profile_subscription_active">Subscription active</string>
+    <string name="profile_subscription_inactive">Subscription inactive</string>
+    <string name="profile_subscription_eyebrow">SUBSCRIPTION</string>
+    <string name="profile_subscription_off">Inactive</string>
+    <string name="profile_subscription_on">Active</string>
+    <string name="profile_days_left">%1$s left</string>
+    <string name="profile_until">until %1$s</string>
+    <plurals name="profile_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <string name="profile_key_expired">Expired</string>
+    <string name="profile_key_forever">Unlimited</string>
+    <string name="profile_metric_keys">Keys</string>
+    <string name="profile_metric_months">Months</string>
+    <string name="profile_metric_spent">Spent</string>
+    <string name="profile_money">%1$s ₽</string>
+    <string name="profile_section_account">Account</string>
+    <string name="profile_login">Username</string>
+    <string name="profile_email">E-mail</string>
+    <string name="profile_plan">Plan</string>
+    <string name="profile_support">Contact support</string>
+    <string name="profile_logout">Sign out</string>
+</resources>

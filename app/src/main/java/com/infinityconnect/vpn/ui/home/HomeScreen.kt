@@ -40,10 +40,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinityconnect.vpn.R
 import com.infinityconnect.vpn.ui.components.FullScreenLoading
 import com.infinityconnect.vpn.ui.components.FullScreenMessage
 import com.infinityconnect.vpn.ui.components.StatusPill
@@ -121,12 +124,12 @@ fun HomeScreen(
         drawerContent = {
             AppDrawer(
                 items = listOf(
-                    DrawerItem("⚡", "Подключение") { closeThen {} },
-                    DrawerItem("🧭", "Маршрутизация") { closeThen(onOpenRouting) },
-                    DrawerItem("📶", "Пинг") { closeThen(onOpenPing) },
-                    DrawerItem("📝", "Логи") { closeThen(onOpenLogs) },
-                    DrawerItem("👤", "Профиль") { closeThen(onOpenProfile) },
-                    DrawerItem("ℹ", "О приложении") { closeThen(onOpenAbout) },
+                    DrawerItem("⚡", stringResource(R.string.home_drawer_connection)) { closeThen {} },
+                    DrawerItem("🧭", stringResource(R.string.home_drawer_routing)) { closeThen(onOpenRouting) },
+                    DrawerItem("📶", stringResource(R.string.home_drawer_ping)) { closeThen(onOpenPing) },
+                    DrawerItem("📝", stringResource(R.string.home_drawer_logs)) { closeThen(onOpenLogs) },
+                    DrawerItem("👤", stringResource(R.string.home_drawer_profile)) { closeThen(onOpenProfile) },
+                    DrawerItem("ℹ", stringResource(R.string.home_drawer_about)) { closeThen(onOpenAbout) },
                 ),
                 // HOME — единственный экран с меню, поэтому активен всегда пункт 0:
                 // остальные пункты открывают экраны поверх, со своим топбаром.
@@ -142,19 +145,22 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Infinity Connect",
+                        stringResource(R.string.home_title),
                         fontWeight = FontWeight.Bold,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 navigationIcon = {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(Icons.Filled.Menu, contentDescription = "Меню")
+                        Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.home_menu))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Обновить подписки")
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = stringResource(R.string.home_refresh_subscriptions),
+                        )
                     }
                 },
             )
@@ -166,19 +172,18 @@ fun HomeScreen(
 
             ui.keys.isEmpty() && ui.error != null ->
                 FullScreenMessage(
-                    title = "Не удалось загрузить",
+                    title = stringResource(R.string.home_load_failed),
                     description = ui.error,
-                    actionLabel = "Повторить",
+                    actionLabel = stringResource(R.string.common_retry),
                     onAction = { viewModel.refresh() },
                     modifier = Modifier.padding(padding),
                 )
 
             ui.keys.isEmpty() ->
                 FullScreenMessage(
-                    title = "Нет доступных ключей",
-                    description = "У вашего аккаунта пока нет активных подписок. " +
-                        "Оформите подписку на сайте — ключи появятся автоматически.",
-                    actionLabel = "Обновить",
+                    title = stringResource(R.string.home_no_keys_title),
+                    description = stringResource(R.string.home_no_keys_description),
+                    actionLabel = stringResource(R.string.common_refresh),
                     onAction = { viewModel.refresh() },
                     modifier = Modifier.padding(padding),
                 )
@@ -380,15 +385,18 @@ private fun CollapsedSummary(
     ) {
         Text(
             text = when {
-                loading -> "Загрузка серверов…"
-                serverCount == 0 -> "Нет серверов"
-                else -> "$serverCount ${plural(serverCount, "сервер", "сервера", "серверов")} · нажмите, чтобы выбрать"
+                loading -> stringResource(R.string.home_servers_loading)
+                serverCount == 0 -> stringResource(R.string.home_no_servers)
+                else -> stringResource(
+                    R.string.home_collapsed_summary,
+                    pluralStringResource(R.plurals.home_server_count, serverCount, serverCount),
+                )
             },
             style = MaterialTheme.typography.bodySmall,
             color = InfinityColors.Muted,
         )
         bestPing?.let {
-            StatusPill(text = "⚡ $it мс", color = com.infinityconnect.vpn.ui.settings.pingColor(pingMethod, it))
+            StatusPill(text = stringResource(R.string.home_ping_best_ms, it), color = com.infinityconnect.vpn.ui.settings.pingColor(pingMethod, it))
         }
     }
 }
@@ -421,29 +429,17 @@ private fun NoActiveSubscriptionsBanner() {
         )
         Column {
             Text(
-                text = "Нет активных подписок",
+                text = stringResource(R.string.home_no_active_title),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = InfinityColors.OnSurface,
             )
             Text(
-                text = "Все ключи истекли, отключены или достигли лимита. " +
-                    "Продлите подписку на сайте — доступ восстановится автоматически.",
+                text = stringResource(R.string.home_no_active_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = InfinityColors.Muted,
             )
         }
-    }
-}
-
-/** Множественное число (день/дня/дней). */
-private fun plural(n: Int, one: String, few: String, many: String): String {
-    val m10 = n % 10
-    val m100 = n % 100
-    return when {
-        m10 == 1 && m100 != 11 -> one
-        m10 in 2..4 && m100 !in 12..14 -> few
-        else -> many
     }
 }
 
@@ -480,7 +476,7 @@ private fun ConnectionHeader(
             SelectedServerHint(server = selectedServer, pingMethod = pingMethod)
         } else {
             Text(
-                text = "Выберите сервер",
+                text = stringResource(R.string.home_pick_server),
                 style = MaterialTheme.typography.bodyMedium,
                 color = InfinityColors.Muted,
             )
@@ -496,7 +492,7 @@ private fun SelectedServerHint(
 ) {
     if (server == null) {
         Text(
-            text = "Нажмите, чтобы подключиться",
+            text = stringResource(R.string.home_tap_to_connect),
             style = MaterialTheme.typography.bodyMedium,
             color = InfinityColors.Muted,
         )
@@ -507,13 +503,13 @@ private fun SelectedServerHint(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = "${server.flag ?: "🌐"}  ${server.name}",
+            text = "${server.flag ?: stringResource(R.string.home_globe_fallback)}  ${server.name}",
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
             color = InfinityColors.OnSurface,
         )
         server.pingMs?.takeIf { it >= 0 }?.let {
-            StatusPill(text = "$it мс", color = com.infinityconnect.vpn.ui.settings.pingColor(pingMethod, it))
+            StatusPill(text = stringResource(R.string.home_ping_ms, it), color = com.infinityconnect.vpn.ui.settings.pingColor(pingMethod, it))
         }
     }
 }
@@ -528,9 +524,21 @@ private fun StatsRow(stats: com.infinityconnect.vpn.vpn.TunnelStats) {
         // Объём за сессию, а не скорость: плитки подписаны «Скачано»/«Отдано».
         // Скорость в подписи — мгновенная дельта, она часто нулевая (ядра
         // обновляют счётчики реже, чем раз в секунду) и выглядела как «трафика нет».
-        StatTile("↓ Скачано", formatBytes(stats.totalDownloadBytes), Modifier.weight(1f))
-        StatTile("↑ Отдано", formatBytes(stats.totalUploadBytes), Modifier.weight(1f))
-        StatTile("Время", formatDuration(stats.sessionSeconds), Modifier.weight(1f))
+        StatTile(
+            stringResource(R.string.home_stat_downloaded),
+            formatBytes(stats.totalDownloadBytes),
+            Modifier.weight(1f),
+        )
+        StatTile(
+            stringResource(R.string.home_stat_uploaded),
+            formatBytes(stats.totalUploadBytes),
+            Modifier.weight(1f),
+        )
+        StatTile(
+            stringResource(R.string.home_stat_time),
+            formatDuration(stats.sessionSeconds),
+            Modifier.weight(1f),
+        )
     }
 }
 
@@ -569,7 +577,7 @@ private fun PingAllBar(pinging: Boolean, onPingAll: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "МОИ ПОДПИСКИ",
+            text = stringResource(R.string.home_my_subscriptions),
             style = EyebrowStyle,
             color = InfinityColors.Muted,
             modifier = Modifier.padding(start = 4.dp),
@@ -582,7 +590,7 @@ private fun PingAllBar(pinging: Boolean, onPingAll: () -> Unit) {
             if (pinging) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Пинг…")
+                Text(stringResource(R.string.home_ping_running))
             } else {
                 Icon(
                     Icons.Filled.NetworkPing,
@@ -590,19 +598,22 @@ private fun PingAllBar(pinging: Boolean, onPingAll: () -> Unit) {
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Пинг всех")
+                Text(stringResource(R.string.home_ping_all))
             }
         }
     }
 }
 
-private fun statusTitle(tunnel: TunnelState): String = when (tunnel) {
-    TunnelState.Connected -> "Подключено"
-    TunnelState.Connecting -> "Подключение…"
-    TunnelState.Disconnecting -> "Отключение…"
-    TunnelState.Disconnected -> "Не подключено"
-    is TunnelState.Error -> "Ошибка"
-}
+@Composable
+private fun statusTitle(tunnel: TunnelState): String = stringResource(
+    when (tunnel) {
+        TunnelState.Connected -> R.string.home_status_connected
+        TunnelState.Connecting -> R.string.home_status_connecting
+        TunnelState.Disconnecting -> R.string.home_status_disconnecting
+        TunnelState.Disconnected -> R.string.home_status_disconnected
+        is TunnelState.Error -> R.string.home_status_error
+    },
+)
 
 private fun statusColor(tunnel: TunnelState): Color = when (tunnel) {
     TunnelState.Connected -> InfinityColors.Mint
