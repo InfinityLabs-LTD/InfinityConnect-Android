@@ -3,6 +3,7 @@ package com.infinityconnect.vpn.data.local
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
+import com.infinityconnect.vpn.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
@@ -43,10 +44,14 @@ class DeviceIdProvider @Inject constructor(
 
     /**
      * User-Agent клиента: панель Remnawave настроена отдавать реальные конфиги
-     * (VLESS-URI в base64) именно для InfinityVPN. Версия синхронизирована с
-     * versionName приложения.
+     * (VLESS-URI в base64) именно для InfinityVPN.
+     *
+     * Версия берётся из [BuildConfig], а не пишется строкой: раньше здесь был
+     * зашит «1.0.0», и при подъёме versionName в build.gradle.kts заголовок
+     * молча оставался от прошлого релиза. Имя продукта («InfinityVPN») менять
+     * нельзя — по нему панель узнаёт клиента и решает, отдавать ли конфиги.
      */
-    val userAgent: String get() = "InfinityVPN/1.0.0"
+    val userAgent: String get() = "InfinityVPN/${BuildConfig.VERSION_NAME}"
 
     private companion object {
         const val KEY_HWID = "hwid"
