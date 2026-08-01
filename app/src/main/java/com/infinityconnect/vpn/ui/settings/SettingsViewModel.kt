@@ -213,6 +213,12 @@ class SettingsViewModel @Inject constructor(
      *    убирает основную массу служебных системных пакетов ещё до чтения меток;
      *  - метки читаем параллельно на [Dispatchers.IO] (операция IO-bound, не CPU-bound);
      *  - результат отдаём порциями, чтобы список появлялся сразу и наполнялся на глазах.
+     *
+     * Разрешения НЕЛЬЗЯ запрашивать одним `getInstalledPackages(GET_PERMISSIONS)`:
+     * requestedPermissions всех пакетов разом не влезает в буфер Binder-транзакции
+     * (1 МБ на процесс) и вызов падает с TransactionTooLargeException — список
+     * получался пустым. Поэтому перечисляем пакеты «лёгким» вызовом, а разрешения
+     * дотягиваем поштучно внутри тех же параллельных порций, что и метки.
      */
     fun loadApps() {
         if (_apps.value.isNotEmpty() || appsJob?.isActive == true) return
@@ -220,39 +226,37 @@ class SettingsViewModel @Inject constructor(
         appsJob = viewModelScope.launch {
             try {
                 val pm = appContext.packageManager
-                // Один IPC-вызов вместо getInstalledApplications + N × getPackageInfo:
-                // requestedPermissions приходит сразу для всех пакетов.
-                val packages = withContext(Dispatchers.IO) {
-                    runCatching {
-                        pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
-                    }.getOrDefault(emptyList())
+                val installed = withContext(Dispatchers.IO) {
+                    runCatching { pm.getInstalledApplications(0) }.getOrDefault(emptyList())
                 }
 
-                val candidates = packages.filter { pkg ->
-                    val info = pkg.applicationInfo ?: return@filter false
-                    if (pkg.packageName == appContext.packageName) return@filter false
-                    pkg.requestedPermissions?.contains(Manifest.permission.INTERNET) == true &&
-                        info.enabled
+                val candidates = installed.filter { info ->
+                    info.enabled && info.packageName != appContext.packageName
                 }
 
                 val collected = ArrayList<InstalledApp>(candidates.size)
-                // Порции: параллельно читаем метки и сразу публикуем то, что готово.
+                // Порции: параллельно читаем разрешения и метки, сразу публикуем готовое.
                 candidates.chunked(APPS_CHUNK).forEach { chunk ->
                     val part = withContext(Dispatchers.IO) {
-                        chunk.map { pkg ->
+                        chunk.map { info ->
                             async {
-                                val info = pkg.applicationInfo!!
+                                val hasInternet = runCatching {
+                                    pm.getPackageInfo(info.packageName, PackageManager.GET_PERMISSIONS)
+                                        .requestedPermissions
+                                        ?.contains(Manifest.permission.INTERNET)
+                                }.getOrNull() ?: false
+                                if (!hasInternet) return@async null
                                 val label = runCatching { pm.getApplicationLabel(info).toString() }
                                     .getOrNull()
                                     ?.takeIf { it.isNotBlank() }
-                                    ?: pkg.packageName
+                                    ?: info.packageName
                                 InstalledApp(
-                                    packageName = pkg.packageName,
+                                    packageName = info.packageName,
                                     label = label,
                                     isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
                                 )
                             }
-                        }.awaitAll()
+                        }.awaitAll().filterNotNull()
                     }
                     collected += part
                     _apps.value = collected.sortedWith(APPS_ORDER)
