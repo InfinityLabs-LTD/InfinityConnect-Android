@@ -172,7 +172,9 @@ class VpnTileService : TileService() {
         val tile = qsTile ?: return
         tile.state = tileState
         tile.label = getString(R.string.tile_label)
-        tile.icon = Icon.createWithResource(this, R.drawable.ic_stat_logo)
+        // Своя иконка, не ic_stat_logo: та огрублена под 16dp статус-бара и в
+        // круге плитки читается как текстовый курсор (см. ic_tile_logo.xml).
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_logo)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = label
         }

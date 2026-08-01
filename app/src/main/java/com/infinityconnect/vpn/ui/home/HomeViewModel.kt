@@ -504,6 +504,12 @@ class HomeViewModel @Inject constructor(
         }
         // Прерываем замер пинга: он конкурирует с подключением за сеть.
         cancelPing()
+        // Запоминаем цель ИМЕННО при подключении, а не только при выборе из
+        // списка: сервер мог быть восстановлен из прошлой сессии и в UI
+        // показываться выбранным, хотя в хранилище лежит запись постарше.
+        // Тогда плитка в шторке (VpnTileService берёт сервер отсюда) подняла бы
+        // не тот сервер, что видит пользователь на экране.
+        rememberLastServer(keyId, _ui.value.selectedServerIndex, _ui.value.selectedServerName)
         vpnController.connect(keyId, _ui.value.selectedServerIndex, _ui.value.selectedServerName)
     }
 
